@@ -11,6 +11,7 @@ export default function LandingPage() {
   const [nickname, setNickname] = useState('');
   const [busy, setBusy] = useState<'join' | 'create' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [createdCode, setCreatedCode] = useState<string | null>(null);
 
   const joinable = code.trim().length >= 4 && nickname.trim().length >= 1;
 
@@ -28,11 +29,23 @@ export default function LandingPage() {
         return;
       }
       localStorage.setItem('memeback:nickname', nickname.trim().slice(0, 20));
-      router.push(`/play/${clean}`);
+      goTo(`/play/${clean}`);
     } catch {
       setError(th.error);
       setBusy(null);
     }
+  }
+
+  /**
+   * Client-side routing can silently do nothing — a stale dev tab, a failed RSC
+   * fetch — and the button then sits on its loading label forever even though
+   * the room already exists. Fall back to a full page load if we haven't moved.
+   */
+  function goTo(path: string) {
+    router.push(path);
+    setTimeout(() => {
+      if (window.location.pathname !== path) window.location.assign(path);
+    }, 1500);
   }
 
   async function handleCreate() {
@@ -48,7 +61,8 @@ export default function LandingPage() {
         return;
       }
       rememberTeacherKey(data.code, data.teacherKey);
-      router.push(`/host/${data.code}`);
+      setCreatedCode(data.code);
+      goTo(`/host/${data.code}`);
     } catch {
       setError(th.error);
       setBusy(null);
@@ -109,6 +123,14 @@ export default function LandingPage() {
         >
           {busy === 'create' ? th.creatingRoom : th.createRoom}
         </button>
+
+        {/* Last resort: the room exists, so give the teacher a link they can
+            click even if neither navigation went through. */}
+        {createdCode && (
+          <a className="btn btn-mint w-full" href={`/host/${createdCode}`}>
+            เข้าห้อง {createdCode}
+          </a>
+        )}
         <p className="text-center text-xs font-bold text-ink/55">
           ครูสร้างห้อง → เปิดจอฉาย → นักเรียนเข้าด้วยรหัสห้อง
         </p>
