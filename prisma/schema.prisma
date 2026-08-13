@@ -1,0 +1,89 @@
+// MemeBack schema.
+// Dev runs on SQLite; every field type here is Postgres-compatible so the
+// provider can be swapped without touching the models.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Room {
+  id         String   @id @default(cuid())
+  code       String   @unique // 6 chars, uppercase, no O/0/I/1
+  teacherKey String // secret token kept in the teacher's localStorage
+  phase      String   @default("LOBBY")
+  createdAt  DateTime @default(now())
+
+  questions Question[]
+  players   Player[]
+}
+
+model Question {
+  id            String @id @default(cuid())
+  roomId        String
+  prompt        String // the open-ended question
+  targetConcept String // e.g. "Newton's Third Law"
+  conceptHint   String? // teacher's own plain-language definition
+  subject       String @default("science")
+  language      String @default("th")
+  distractors   Json // string[] — AI-generated wrong concepts for guessing
+
+  createdAt DateTime @default(now())
+
+  room    Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  answers Answer[]
+
+  @@index([roomId])
+}
+
+model Player {
+  id       String  @id @default(cuid())
+  roomId   String
+  nickname String
+  score    Int     @default(0)
+  socketId String?
+
+  room    Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  answers Answer[]
+  guesses Guess[]
+
+  @@index([roomId])
+}
+
+model Answer {
+  id         String   @id @default(cuid())
+  questionId String
+  playerId   String
+  rawText    String
+  analysis   Json? // SceneSpec
+  verdict    String? // correct | partial | misconception | off_topic
+  memeUrl    String? // /memes/<id>.gif
+  promoted   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  player   Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  guesses  Guess[]
+
+  @@index([questionId])
+  @@index([playerId])
+}
+
+model Guess {
+  id       String  @id @default(cuid())
+  answerId String
+  playerId String
+  choice   String
+  correct  Boolean
+
+  createdAt DateTime @default(now())
+
+  answer Answer @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([answerId, playerId])
+  @@index([answerId])
+}

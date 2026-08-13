@@ -1,0 +1,26 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# local database + generated prisma client
+*.db
+*.db-journal
+prisma/dev.db*
+
+# runtime-written meme files and the copied gif.js worker
+public/memes/
+public/gif.worker.js
+
+.env
+.env.local
+.env.*.local
+
+*.tsbuildinfo
+next-env.d.ts
+
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

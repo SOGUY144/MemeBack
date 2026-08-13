@@ -1,0 +1,212 @@
+@import 'tailwindcss';
+
+/*
+  Loud and playful on purpose: thick ink borders, hard offset shadows, saturated
+  fills. No web fonts — the app has to boot on a school laptop with no network,
+  so the stack leans on Leelawadee UI / Noto Sans Thai, whichever is present.
+*/
+
+@theme {
+  --color-ink: #111318;
+  --color-paper: #fff6e5;
+  --color-paper-2: #ffe9c4;
+  --color-pop: #ff6b35;
+  --color-sun: #ffd93d;
+  --color-mint: #16c79a;
+  --color-sky: #2e86ff;
+  --color-berry: #e63946;
+  --color-grape: #7f6fb0;
+  --color-night: #16171f;
+
+  --font-display: 'Noto Sans Thai', 'Leelawadee UI', 'Segoe UI', system-ui, sans-serif;
+  --font-sans: 'Noto Sans Thai', 'Leelawadee UI', 'Segoe UI', system-ui, sans-serif;
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-text-size-adjust: 100%;
+    overscroll-behavior: none;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+  }
+
+  button {
+    font-family: inherit;
+  }
+
+  input,
+  textarea,
+  select {
+    font-family: inherit;
+    font-size: 16px; /* stops iOS from zooming on focus */
+  }
+}
+
+@layer components {
+  /* the one shape this whole app is built out of */
+  .chunk {
+    border: 4px solid var(--color-ink);
+    border-radius: 18px;
+    box-shadow: 6px 6px 0 var(--color-ink);
+    background: #fff;
+  }
+
+  .chunk-sm {
+    border: 3px solid var(--color-ink);
+    border-radius: 12px;
+    box-shadow: 4px 4px 0 var(--color-ink);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.85rem 1.4rem;
+    border: 4px solid var(--color-ink);
+    border-radius: 14px;
+    box-shadow: 5px 5px 0 var(--color-ink);
+    background: #fff;
+    font-weight: 900;
+    font-size: 1.05rem;
+    cursor: pointer;
+    transition:
+      transform 90ms ease,
+      box-shadow 90ms ease,
+      filter 90ms ease;
+    text-align: center;
+  }
+
+  .btn:hover:not(:disabled) {
+    filter: brightness(1.04);
+  }
+
+  .btn:active:not(:disabled) {
+    transform: translate(5px, 5px);
+    box-shadow: 0 0 0 var(--color-ink);
+  }
+
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: 3px 3px 0 var(--color-ink);
+  }
+
+  .btn-pop {
+    background: var(--color-pop);
+    color: #fff;
+  }
+  .btn-sun {
+    background: var(--color-sun);
+  }
+  .btn-mint {
+    background: var(--color-mint);
+    color: #06281f;
+  }
+  .btn-sky {
+    background: var(--color-sky);
+    color: #fff;
+  }
+  .btn-ghost {
+    background: transparent;
+    box-shadow: 3px 3px 0 var(--color-ink);
+  }
+
+  .field {
+    width: 100%;
+    padding: 0.85rem 1rem;
+    border: 4px solid var(--color-ink);
+    border-radius: 14px;
+    background: #fff;
+    font-weight: 700;
+    outline: none;
+  }
+
+  .field:focus {
+    box-shadow: 0 0 0 4px var(--color-sun);
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.7rem;
+    border: 3px solid var(--color-ink);
+    border-radius: 999px;
+    font-weight: 900;
+    font-size: 0.8rem;
+    background: #fff;
+  }
+
+  /* projector: readable from the back of the room */
+  .screen-root {
+    background: var(--color-night);
+    color: #fff;
+    min-height: 100vh;
+  }
+
+  .screen-code {
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    font-size: clamp(4rem, 15vw, 12rem);
+    line-height: 1;
+    color: var(--color-sun);
+    text-shadow: 8px 8px 0 var(--color-ink);
+  }
+
+  .meme-frame {
+    image-rendering: auto;
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 10px;
+    background: var(--color-ink);
+  }
+}
+
+@layer utilities {
+  .stack-shadow {
+    box-shadow: 6px 6px 0 var(--color-ink);
+  }
+
+  .wiggle {
+    animation: wiggle 1.6s ease-in-out infinite;
+  }
+
+  @keyframes wiggle {
+    0%,
+    100% {
+      transform: rotate(-1.5deg);
+    }
+    50% {
+      transform: rotate(1.5deg);
+    }
+  }
+
+  .pulse-ring {
+    animation: pulse-ring 1.1s ease-out infinite;
+  }
+
+  @keyframes pulse-ring {
+    0% {
+      box-shadow: 0 0 0 0 rgb(255 217 61 / 70%);
+    }
+    100% {
+      box-shadow: 0 0 0 22px rgb(255 217 61 / 0%);
+    }
+  }
+}
