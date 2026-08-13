@@ -155,6 +155,27 @@ describe('compileScene — target reactions', () => {
     expect(knock.fromX).toBeGreaterThan(kick.toX);
   });
 
+  it('recoils the thing you jump off, and leaves a plain jump alone', () => {
+    const offBoat = compileScene(
+      base({
+        actors: [
+          { id: 'A', label: 'คน', sprite: 'person_a', x: 0.34 },
+          { id: 'B', label: 'เรือ', sprite: 'boat', x: 0.66 },
+        ],
+        beats: [{ actor: 'A', clip: 'jump', target: 'B', duration_ms: 900 }],
+      }),
+    );
+    const recoil = offBoat.segments.find((s) => s.auto && s.clip === 'knockback');
+    expect(recoil?.actorId).toBe('B');
+    expect(offBoat.impacts).toHaveLength(1);
+
+    const plainJump = compileScene(
+      base({ beats: [{ actor: 'A', clip: 'jump', target: null, duration_ms: 900 }] }),
+    );
+    expect(plainJump.segments.filter((s) => s.auto && s.clip === 'knockback')).toHaveLength(0);
+    expect(plainJump.impacts).toHaveLength(0);
+  });
+
   it('pushes the target backwards for push, and hands the ball over for throw', () => {
     const pushed = compileScene(
       base({ beats: [{ actor: 'A', clip: 'push', target: 'B', duration_ms: 900 }] }),

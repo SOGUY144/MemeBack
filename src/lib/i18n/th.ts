@@ -96,6 +96,7 @@ export const th = {
   roomNotFound: 'ไม่พบห้องนี้',
   seconds: 'วินาที',
   aiOffline: 'โหมดไม่มี AI — ทุกคำตอบจะใช้ฉากสำรอง',
-} as const;
+};
 
+/** Thai is the source of truth; every other locale must cover the same keys. */
 export type Strings = typeof th;

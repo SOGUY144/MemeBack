@@ -55,6 +55,13 @@ const AVC_CODEC = 'avc1.4d001f'; // Main profile, level 3.1 — plays everywhere
 
 async function mp4Supported(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
+  // Escape hatch for testing the gif.js path on a browser that has WebCodecs:
+  //   localStorage['memeback:force-gif'] = '1'
+  try {
+    if (localStorage.getItem('memeback:force-gif') === '1') return false;
+  } catch {
+    /* private mode */
+  }
   if (typeof (window as { VideoEncoder?: unknown }).VideoEncoder === 'undefined') return false;
   try {
     const res = await VideoEncoder.isConfigSupported({

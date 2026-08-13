@@ -678,9 +678,19 @@ export class SceneRenderer {
   }
 
   destroy(): void {
+    if (this.destroyed) return;
     this.stop();
     this.destroyed = true;
-    this.app.destroy(true, { children: true });
+    try {
+      // Tear down the renderer and drop the canvas, but leave the scene graph
+      // and textures alone: sprite textures are cached and shared across every
+      // renderer on the page, and Pixi v8 throws while destroying Text children
+      // whose texture pool has already gone. The stage is unreachable after
+      // this and is collected normally.
+      this.app.destroy({ removeView: true }, { children: false, texture: false });
+    } catch (err) {
+      console.warn('[SceneRenderer] destroy failed:', err);
+    }
   }
 }
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { useRoom } from '@/lib/realtime/client';
+import { rememberTeacherKey, useRoom } from '@/lib/realtime/client';
 import { th } from '@/lib/i18n/th';
 import type { GenerationStatus, Phase, RevealPayload, ScoreRow } from '@/lib/realtime/events';
 import type { Verdict } from '@/lib/meme/vocab';
@@ -49,6 +49,16 @@ function primaryAction(phase: Phase): { to: Phase; label: string } | null {
 export default function HostPage() {
   const params = useParams<{ code: string }>();
   const code = (params.code ?? '').toUpperCase();
+
+  // `?key=…` lets the seeded room be opened from a link. Runs during the first
+  // render so the key is in localStorage before useRoom tries to join.
+  useState(() => {
+    if (typeof window === 'undefined') return null;
+    const key = new URLSearchParams(window.location.search).get('key');
+    if (key && code) rememberTeacherKey(code, key);
+    return null;
+  });
+
   const { socket, state, connected, error } = useRoom(code, { role: 'teacher' });
 
   const [rows, setRows] = useState<GenerationStatus[]>([]);

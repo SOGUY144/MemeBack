@@ -146,6 +146,9 @@ export const CLIPS_LIB: Record<ClipName, Clip> = {
   },
 
   jump: {
+    // A jump *at something* is a push-off, and the thing pushed off recoils —
+    // which is the whole point of the canonical "jump out of a boat" answer.
+    impact: 0.32,
     rootMotion: { dx: 0.07, dy: 0 },
     tracks: [
       {
@@ -498,6 +501,7 @@ export const IMPACT_CLIPS: ReadonlySet<ClipName> = new Set([
 
 /** Which reaction the target of a beat performs when the hit lands. */
 export const TARGET_REACTION: Partial<Record<ClipName, ClipName>> = {
+  jump: 'knockback',
   kick: 'knockback',
   punch: 'knockback',
   collide: 'knockback',

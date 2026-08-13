@@ -52,6 +52,7 @@ export default function PlayPage() {
   const [scores, setScores] = useState<ScoreRow[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const uploadedRef = useRef<string | null>(null);
+  const questionRef = useRef<string | null>(null);
 
   const phase = state?.phase ?? 'LOBBY';
 
@@ -72,6 +73,11 @@ export default function PlayPage() {
       setStage(p.verdict === 'off_topic' ? null : 'composing');
     };
     const onProgress = (p: { answerId: string; stage: Stage }) => setStage(p.stage);
+    const onOwnAnswer = (p: { answerId: string; rawText: string }) => {
+      setAnswer(p.rawText);
+      setSentAnswerId(p.answerId);
+      setEditing(false);
+    };
     const onCard = (c: GuessCard | null) => {
       setCard(c);
       setGuessed(null);
@@ -81,12 +87,14 @@ export default function PlayPage() {
     const onScores = (p: { rows: ScoreRow[] }) => setScores(p.rows);
 
     socket.on('meme:mine', onMine);
+    socket.on('answer:mine', onOwnAnswer);
     socket.on('meme:progress', onProgress);
     socket.on('guess:card', onCard);
     socket.on('reveal:answer', onReveal);
     socket.on('scoreboard', onScores);
     return () => {
       socket.off('meme:mine', onMine);
+      socket.off('answer:mine', onOwnAnswer);
       socket.off('meme:progress', onProgress);
       socket.off('guess:card', onCard);
       socket.off('reveal:answer', onReveal);
@@ -100,15 +108,24 @@ export default function PlayPage() {
     return () => clearInterval(id);
   }, [phase]);
 
-  // a new question resets everything on this device
+  // Reset only when the teacher actually asks a *new* question. Keying this off
+  // the phase alone wiped the meme of a student who reconnected while the room
+  // was still in ANSWERING.
   useEffect(() => {
-    if (phase === 'ANSWERING' && state?.question?.id) {
-      setMine(null);
-      setStage(null);
-      setEncodeProgress(0);
-      uploadedRef.current = null;
-    }
-  }, [phase, state?.question?.id]);
+    const id = state?.question?.id;
+    if (!id) return;
+    if (questionRef.current === id) return;
+    const first = questionRef.current === null;
+    questionRef.current = id;
+    if (first) return;
+    setMine(null);
+    setStage(null);
+    setEncodeProgress(0);
+    setAnswer('');
+    setSentAnswerId(null);
+    setEditing(false);
+    uploadedRef.current = null;
+  }, [state?.question?.id]);
 
   const myRank = useMemo(
     () => scores.find((r) => r.playerId === playerId) ?? null,
@@ -298,7 +315,7 @@ export default function PlayPage() {
             </span>
           </Card>
 
-          {mine?.answerId === card.answerId ? (
+          {card.authorPlayerId === playerId ? (
             <Card className="text-center">
               <p className="text-lg font-black">{th.ownMemeNoGuess}</p>
             </Card>

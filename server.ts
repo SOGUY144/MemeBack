@@ -21,6 +21,17 @@ async function main() {
     });
   });
 
+  // Registered *before* Socket.IO attaches: engine.io snapshots the existing
+  // upgrade listeners when it attaches and replays non-Socket.IO upgrades to
+  // them. Register this afterwards and dev HMR loses its websocket.
+  const upgradeHandler = app.getUpgradeHandler();
+  server.on('upgrade', (req, socket, head) => {
+    upgradeHandler(req, socket, head).catch((err: unknown) => {
+      console.error('[next] upgrade failed:', err);
+      socket.destroy();
+    });
+  });
+
   const io: IO = new Server(server, {
     // students upload their encoded meme over the socket; a 5s GIF at 480×270
     // lands well under this, but the default 1MB would clip the busy ones.

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Server, Socket } from 'socket.io';
 
@@ -7,6 +7,7 @@ import { prisma } from '@/lib/db';
 import { SceneSpec } from '@/lib/ai/scene-schema';
 import { analyzeAnswer, generateDistractors } from '@/server/ai';
 import { suggestPromotions } from '@/server/promotion';
+import type { Verdict } from '@/lib/meme/vocab';
 import { AUTHOR_BONUS, authorEarnedBonus, guessPoints, verdictPoints } from '@/server/scoring';
 import {
   canTransition,
@@ -39,6 +40,8 @@ type Runtime = {
   guessIndex: number;
   guessOpenedAt: number;
   choices: Map<string, string[]>;
+  /** Authors already paid the crowd bonus, so re-revealing a meme cannot pay twice. */
+  bonusPaid: Set<string>;
   pendingAnalyses: number;
 };
 
@@ -53,6 +56,7 @@ function runtime(code: string): Runtime {
       guessIndex: 0,
       guessOpenedAt: 0,
       choices: new Map(),
+      bonusPaid: new Set(),
       pendingAnalyses: 0,
     };
     runtimes.set(code, r);
@@ -133,10 +137,40 @@ async function pushRoomState(io: IO, code: string) {
   if (state) io.to(roomChannel(code)).emit('room:state', state);
 }
 
-function pushGenerationStatus(io: IO, code: string) {
-  const rows = [...runtime(code).generation.values()].sort((a, b) =>
-    a.nickname.localeCompare(b.nickname),
-  );
+/**
+ * The teacher's per-student list is built from the database, with the transient
+ * `stage` merged in from memory. Building it the other way round meant a server
+ * restart — or a teacher opening the panel late — showed an empty class.
+ */
+async function pushGenerationStatus(io: IO, code: string) {
+  const room = await prisma.room.findUnique({ where: { code } });
+  if (!room) return;
+  const question = await currentQuestion(room.id);
+
+  const rt = runtime(code);
+  const rows: GenerationStatus[] = question
+    ? (
+        await prisma.answer.findMany({
+          where: { questionId: question.id },
+          include: { player: true },
+          orderBy: { createdAt: 'asc' },
+        })
+      ).map((a) => {
+        const live = rt.generation.get(a.id);
+        return {
+          answerId: a.id,
+          playerId: a.playerId,
+          nickname: a.player.nickname,
+          stage: live?.stage ?? (a.analysis ? 'done' : 'analyzing'),
+          verdict: (a.verdict as GenerationStatus['verdict']) ?? null,
+          promoted: a.promoted,
+          hasFile: Boolean(a.memeUrl),
+          rawText: a.rawText,
+        };
+      })
+    : [];
+
+  rows.sort((a, b) => a.nickname.localeCompare(b.nickname));
   io.to(teacherChannel(code)).emit('generation:status', { rows });
 }
 
@@ -190,7 +224,7 @@ async function runAnalysis(io: IO, code: string, answerId: string) {
       rawText: answer.rawText,
     };
     rt.generation.set(answerId, status);
-    pushGenerationStatus(io, code);
+    await pushGenerationStatus(io, code);
     io.to(playerChannel(answer.playerId)).emit('meme:progress', { answerId, stage: 'analyzing' });
 
     const { spec } = await analyzeAnswer({
@@ -207,14 +241,22 @@ async function runAnalysis(io: IO, code: string, answerId: string) {
       }),
       prisma.player.update({
         where: { id: answer.playerId },
-        data: { score: { increment: verdictPoints(spec.verdict) } },
+        // Award the *difference*, not the full amount: a student who edits and
+        // resubmits gets re-analysed, and paying out again each time turned a
+        // rewrite into a way to farm points.
+        data: {
+          score: {
+            increment:
+              verdictPoints(spec.verdict) - verdictPoints(answer.verdict as Verdict | null),
+          },
+        },
       }),
     ]);
 
     status.stage = spec.verdict === 'off_topic' ? 'done' : 'composing';
     status.verdict = spec.verdict;
     rt.generation.set(answerId, status);
-    pushGenerationStatus(io, code);
+    await pushGenerationStatus(io, code);
 
     io.to(playerChannel(answer.playerId)).emit('meme:mine', {
       answerId,
@@ -230,7 +272,7 @@ async function runAnalysis(io: IO, code: string, answerId: string) {
     const status = rt.generation.get(answerId);
     if (status) {
       status.stage = 'failed';
-      pushGenerationStatus(io, code);
+      await pushGenerationStatus(io, code);
     }
   } finally {
     rt.pendingAnalyses--;
@@ -266,31 +308,46 @@ async function applyAutoPromotions(io: IO, code: string) {
     const s = rt.generation.get(a.id);
     if (s) s.promoted = picked.has(a.id);
   }
-  pushGenerationStatus(io, code);
+  await pushGenerationStatus(io, code);
 }
 
-async function openGuessRound(io: IO, code: string, index: number) {
+/**
+ * The order memes go up on the projector. Held in memory for speed but always
+ * recoverable from the `promoted` flags, so a server restart mid-round does not
+ * strand the class on a blank screen.
+ */
+async function ensureGuessOrder(code: string, questionId: string) {
+  const rt = runtime(code);
+  if (rt.guessOrder.length) return rt.guessOrder;
+
+  const promoted = await prisma.answer.findMany({
+    where: { questionId, promoted: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  rt.guessOrder = promoted.filter((a) => parseSpec(a.analysis)).map((a) => a.id);
+  return rt.guessOrder;
+}
+
+/** Builds the card for a round without broadcasting, so a reconnecting device
+ *  can be caught up with exactly what the room is looking at. */
+async function buildGuessCard(code: string, index: number): Promise<GuessCard | null> {
   const rt = runtime(code);
   const room = await prisma.room.findUnique({ where: { code } });
-  if (!room) return;
+  if (!room) return null;
   const question = await currentQuestion(room.id);
-  if (!question) return;
+  if (!question) return null;
+
+  await ensureGuessOrder(code, question.id);
 
   const answerId = rt.guessOrder[index];
-  if (!answerId) {
-    io.to(roomChannel(code)).emit('guess:card', null);
-    return;
-  }
+  if (!answerId) return null;
 
   const answer = await prisma.answer.findUnique({
     where: { id: answerId },
     include: { player: true },
   });
   const spec = answer ? parseSpec(answer.analysis) : null;
-  if (!answer || !spec) {
-    io.to(roomChannel(code)).emit('guess:card', null);
-    return;
-  }
+  if (!answer || !spec) return null;
 
   const distractors = Array.isArray(question.distractors)
     ? (question.distractors as string[])
@@ -301,22 +358,47 @@ async function openGuessRound(io: IO, code: string, index: number) {
     rt.choices.set(answerId, choices);
   }
 
-  rt.guessIndex = index;
-  rt.guessOpenedAt = Date.now();
-
-  const card: GuessCard = {
+  return {
     answerId,
     memeUrl: answer.memeUrl,
     scene: spec.scene,
     choices,
     authorNickname: answer.player.nickname,
+    authorPlayerId: answer.playerId,
     index,
     total: rt.guessOrder.length,
+    // Set when the round opened, not when this card was built — a reconnecting
+    // device must see the same countdown as everyone else.
     openedAt: rt.guessOpenedAt,
     durationMs: GUESS_DURATION_MS,
   };
+}
+
+async function openGuessRound(io: IO, code: string, index: number) {
+  const rt = runtime(code);
+  rt.guessIndex = index;
+  rt.guessOpenedAt = Date.now();
+
+  const card = await buildGuessCard(code, index);
   io.to(roomChannel(code)).emit('guess:card', card);
-  await pushTally(io, code, answerId);
+  if (card) await pushTally(io, code, card.answerId);
+}
+
+/**
+ * A phone that reloads mid-round would otherwise sit on a blank screen until the
+ * teacher moved on, because `guess:card` is only emitted when a round opens.
+ */
+async function catchUpOnGuessRound(socket: Sock, code: string, phase: Phase) {
+  if (phase !== 'CLASS_GUESS') return;
+  const rt = runtime(code);
+  const card = await buildGuessCard(code, rt.guessIndex);
+  if (!card) return;
+  socket.emit('guess:card', card);
+
+  const guesses = await prisma.guess.findMany({ where: { answerId: card.answerId } });
+  const counts: Record<string, number> = {};
+  for (const g of guesses) counts[g.choice] = (counts[g.choice] ?? 0) + 1;
+  socket.emit('guess:tally', { answerId: card.answerId, counts, voted: guesses.length });
 }
 
 async function pushTally(io: IO, code: string, answerId: string) {
@@ -339,7 +421,8 @@ async function revealCurrent(io: IO, code: string) {
   const spec = parseSpec(answer.analysis);
 
   const correctVotes = answer.guesses.filter((g) => g.correct).length;
-  if (authorEarnedBonus(correctVotes, answer.guesses.length)) {
+  if (authorEarnedBonus(correctVotes, answer.guesses.length) && !rt.bonusPaid.has(answerId)) {
+    rt.bonusPaid.add(answerId);
     await prisma.player.update({
       where: { id: answer.playerId },
       data: { score: { increment: AUTHOR_BONUS } },
@@ -376,6 +459,7 @@ async function enterPhase(io: IO, code: string, phase: Phase) {
     rt.guessOrder = [];
     rt.guessIndex = 0;
     rt.choices.clear();
+    rt.bonusPaid.clear();
     io.to(roomChannel(code)).emit('guess:card', null);
   }
 
@@ -387,13 +471,7 @@ async function enterPhase(io: IO, code: string, phase: Phase) {
     if (rt.guessOrder.length === 0) {
       const room = await prisma.room.findUnique({ where: { code } });
       const question = room ? await currentQuestion(room.id) : null;
-      if (question) {
-        const promoted = await prisma.answer.findMany({
-          where: { questionId: question.id, promoted: true },
-          orderBy: { createdAt: 'asc' },
-        });
-        rt.guessOrder = promoted.filter((a) => parseSpec(a.analysis)).map((a) => a.id);
-      }
+      if (question) await ensureGuessOrder(code, question.id);
       rt.guessIndex = 0;
     }
     await openGuessRound(io, code, rt.guessIndex);
@@ -430,6 +508,7 @@ export function registerSocketHandlers(io: IO) {
           ack?.({ ok: true, playerId: null, isTeacher: false });
           const state = await buildRoomState(io, code);
           if (state) socket.emit('room:state', state);
+          await catchUpOnGuessRound(socket, code, room.phase as Phase);
           return;
         }
 
@@ -443,7 +522,7 @@ export function registerSocketHandlers(io: IO) {
           ack?.({ ok: true, playerId: null, isTeacher: true });
           const state = await buildRoomState(io, code);
           if (state) socket.emit('room:state', state);
-          pushGenerationStatus(io, code);
+          await pushGenerationStatus(io, code);
           return;
         }
 
@@ -478,6 +557,8 @@ export function registerSocketHandlers(io: IO) {
             where: { questionId: question.id, playerId: player.id },
           });
           const spec = mine ? parseSpec(mine.analysis) : null;
+          if (mine) socket.emit('answer:mine', { answerId: mine.id, rawText: mine.rawText });
+          await catchUpOnGuessRound(socket, code, room.phase as Phase);
           if (mine && spec) {
             socket.emit('meme:mine', {
               answerId: mine.id,
@@ -559,7 +640,10 @@ export function registerSocketHandlers(io: IO) {
         const answer = existing
           ? await prisma.answer.update({
               where: { id: existing.id },
-              data: { rawText: text, analysis: undefined, verdict: null, memeUrl: null },
+              // The previous verdict and analysis stay until the new ones land:
+              // clearing them would make the re-analysis look like a first
+              // analysis and pay out the verdict points a second time.
+              data: { rawText: text, memeUrl: null },
             })
           : await prisma.answer.create({
               data: { questionId: question.id, playerId, rawText: text },
@@ -595,6 +679,11 @@ export function registerSocketHandlers(io: IO) {
 
         await mkdir(MEME_DIR, { recursive: true });
         await writeFile(path.join(MEME_DIR, `${answer.id}.${ext}`), bytes);
+        // A re-submitted answer can land in the other format; drop the stale twin
+        // so /memes never keeps a file nothing points at.
+        await rm(path.join(MEME_DIR, `${answer.id}.${ext === 'gif' ? 'mp4' : 'gif'}`), {
+          force: true,
+        });
         const memeUrl = `/memes/${answer.id}.${ext}`;
         await prisma.answer.update({ where: { id: answer.id }, data: { memeUrl } });
 
@@ -603,7 +692,7 @@ export function registerSocketHandlers(io: IO) {
         if (status) {
           status.stage = 'done';
           status.hasFile = true;
-          pushGenerationStatus(io, code);
+          await pushGenerationStatus(io, code);
         }
 
         const spec = parseSpec(answer.analysis);
@@ -683,7 +772,7 @@ export function registerSocketHandlers(io: IO) {
         const status = rt.generation.get(p.answerId);
         if (status) status.promoted = Boolean(p.on);
         rt.guessOrder = [];
-        pushGenerationStatus(io, code);
+        await pushGenerationStatus(io, code);
       } catch (err) {
         console.error('[socket] teacher:promote failed:', err);
       }

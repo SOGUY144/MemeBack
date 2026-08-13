@@ -66,6 +66,9 @@ export type GuessCard = {
   /** Shuffled per meme; the concept itself is never labelled as the answer. */
   choices: string[];
   authorNickname: string;
+  /** So a device can tell it is looking at its own meme without relying on
+   *  having received `meme:mine` earlier in the session. */
+  authorPlayerId: string;
   index: number;
   total: number;
   /** Server clock when the round opened, for the countdown. */
@@ -137,6 +140,9 @@ export type ServerToClient = {
   'meme:progress': (p: { answerId: string; stage: MemeStage }) => void;
   'meme:ready': (p: MemeReady) => void;
   'meme:mine': (p: MemeReady) => void;
+  /** Personal channel only: hands a reconnecting student their own text back so
+   *  the form does not look empty and tempt them into answering twice. */
+  'answer:mine': (p: { answerId: string; rawText: string }) => void;
   'generation:status': (p: { rows: GenerationStatus[] }) => void;
   'guess:card': (p: GuessCard | null) => void;
   'guess:tally': (p: { answerId: string; counts: Record<string, number>; voted: number }) => void;

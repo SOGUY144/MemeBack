@@ -103,7 +103,7 @@ export function compileScene(scene: CompileInput): Timeline {
   const fallbackActorId = actors[0]!.id;
 
   const posX = new Map(actors.map((a) => [a.id, a.x] as const));
-  const posY = new Map(actors.map((a) => [a.id, 0] as const));
+  const posY = new Map<string, number>(actors.map((a) => [a.id, 0]));
   const facing = new Map(
     actors.map((a) => [a.id, (a.x <= 0.5 ? 1 : -1) as 1 | -1] as const),
   );

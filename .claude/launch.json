@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "memeback",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "cd /d C:\\Users\\Zareef\\Documents\\GitHub\\memeback && npm run dev"
+      ],
+      "port": 3000
+    }
+  ]
+}
