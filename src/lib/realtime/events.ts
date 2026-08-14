@@ -44,6 +44,9 @@ export type RoomState = {
   players: PlayerView[];
   question: QuestionView | null;
   answeredCount: number;
+  /** Of those answers, how many the AI has finished reading. Drives the real
+   *  progress bar on the projector during GENERATING. */
+  analyzedCount: number;
   playerCount: number;
 };
 
@@ -127,12 +130,20 @@ export type ClientToServer = {
     ack?: (r: { ok: true; memeUrl: string } | { ok: false; error: string }) => void,
   ) => void;
   'teacher:phase': (p: { phase: Phase }, ack?: (r: { ok: boolean; error?: string }) => void) => void;
-  'teacher:promote': (p: { answerId: string; on: boolean }) => void;
+  'teacher:promote': (
+    p: { answerId: string; on: boolean },
+    ack?: (r: { ok: boolean; error?: string }) => void,
+  ) => void;
   'teacher:question': (
     p: { prompt: string; targetConcept: string; conceptHint?: string; subject?: string },
     ack?: (r: { ok: true; questionId: string } | { ok: false; error: string }) => void,
   ) => void;
   'teacher:guess-next': (p: { index?: number }) => void;
+  /** Re-runs the AI on one answer whose analysis crashed. */
+  'teacher:reanalyze': (
+    p: { answerId: string },
+    ack?: (r: { ok: boolean; error?: string }) => void,
+  ) => void;
 };
 
 export type ServerToClient = {

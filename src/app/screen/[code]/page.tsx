@@ -21,6 +21,7 @@ export default function ScreenPage() {
   const { socket, state } = useRoom(code, { role: 'screen' });
 
   const [qr, setQr] = useState<string | null>(null);
+  const [joinUrl, setJoinUrl] = useState<string | null>(null);
   const [card, setCard] = useState<GuessCard | null>(null);
   const [tally, setTally] = useState<{ counts: Record<string, number>; voted: number }>({
     counts: {},
@@ -32,18 +33,44 @@ export default function ScreenPage() {
 
   const phase = state?.phase ?? 'LOBBY';
 
+  // The projector is the teacher's laptop, so its own origin is `localhost` and
+  // a QR built from it sends every phone to its own loopback. Ask the server for
+  // the address the classroom wifi can reach, and fall back to the current
+  // origin only when it cannot find one.
   useEffect(() => {
-    const url = `${window.location.origin}/play/${code}`;
-    import('qrcode')
-      .then((qrcode) =>
-        qrcode.toDataURL(url, {
+    let cancelled = false;
+
+    async function resolveJoinUrl(): Promise<string> {
+      try {
+        const res = await fetch('/api/join-url');
+        const data: { origin?: string | null } = await res.json();
+        if (data.origin) return `${data.origin}/play/${code}`;
+      } catch {
+        // offline or the route is unavailable — the current origin still works
+        // for anyone browsing from the projector machine itself
+      }
+      return `${window.location.origin}/play/${code}`;
+    }
+
+    void resolveJoinUrl().then(async (url) => {
+      if (cancelled) return;
+      setJoinUrl(url);
+      try {
+        const qrcode = await import('qrcode');
+        const data = await qrcode.toDataURL(url, {
           width: 420,
           margin: 1,
           color: { dark: '#111318', light: '#FFFFFF' },
-        }),
-      )
-      .then(setQr)
-      .catch(() => setQr(null));
+        });
+        if (!cancelled) setQr(data);
+      } catch {
+        if (!cancelled) setQr(null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [code]);
 
   useEffect(() => {
@@ -80,9 +107,9 @@ export default function ScreenPage() {
     : 0;
 
   const generatingPct = useMemo(() => {
-    if (!state) return 0;
-    const total = Math.max(1, state.answeredCount);
-    return Math.min(100, Math.round((state.answeredCount / total) * 100));
+    if (!state || state.answeredCount === 0) return 0;
+    const done = Math.min(state.analyzedCount, state.answeredCount);
+    return Math.round((done / state.answeredCount) * 100);
   }, [state]);
 
   return (
@@ -101,6 +128,12 @@ export default function ScreenPage() {
               />
             )}
           </div>
+          {joinUrl && (
+            <p className="text-center text-3xl font-black text-white/70">
+              {th.openThisUrl}{' '}
+              <span className="text-white">{joinUrl.replace(/^https?:\/\//, '')}</span>
+            </p>
+          )}
           <div className="flex max-w-5xl flex-wrap justify-center gap-3">
             {state?.players.map((p) => (
               <span
@@ -138,7 +171,7 @@ export default function ScreenPage() {
             />
           </div>
           <p className="text-3xl font-black text-white/70">
-            {th.submittedCount(state?.answeredCount ?? 0, state?.playerCount ?? 0)}
+            {th.analyzedCount(state?.analyzedCount ?? 0, state?.answeredCount ?? 0)}
           </p>
         </>
       )}

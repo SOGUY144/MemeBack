@@ -111,6 +111,9 @@ export default function HostPage() {
 
   const action = primaryAction(phase);
   const hasMoreMemes = phase === 'REVEAL' && guessIndex + 1 < guessTotal;
+  // The projector's running order is fixed once guessing opens; the server
+  // refuses changes from here on, so the button says so instead of failing.
+  const orderLocked = phase === 'CLASS_GUESS' || phase === 'REVEAL';
 
   // space = advance
   useEffect(() => {
@@ -283,14 +286,34 @@ export default function HostPage() {
                   </div>
                 </div>
                 <p className="line-clamp-2 text-sm font-bold text-ink/70">{row.rawText}</p>
-                <button
-                  className={`btn px-3 py-1.5 text-sm ${row.promoted ? 'btn-sun' : 'btn-ghost'}`}
-                  onClick={() =>
-                    socket.emit('teacher:promote', { answerId: row.answerId, on: !row.promoted })
-                  }
-                >
-                  {row.promoted ? th.promoted : th.promote}
-                </button>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    className={`btn px-3 py-1.5 text-sm ${row.promoted ? 'btn-sun' : 'btn-ghost'}`}
+                    disabled={orderLocked}
+                    title={orderLocked ? th.orderLocked : undefined}
+                    onClick={() =>
+                      socket.emit(
+                        'teacher:promote',
+                        { answerId: row.answerId, on: !row.promoted },
+                        (res) => setNotice(res.ok ? null : (res.error ?? null)),
+                      )
+                    }
+                  >
+                    {row.promoted ? th.promoted : th.promote}
+                  </button>
+                  {row.stage === 'failed' && (
+                    <button
+                      className="btn btn-sky px-3 py-1.5 text-sm"
+                      onClick={() =>
+                        socket.emit('teacher:reanalyze', { answerId: row.answerId }, (res) =>
+                          setNotice(res.ok ? null : (res.error ?? null)),
+                        )
+                      }
+                    >
+                      {th.retryAnalysis}
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
             {rows.length === 0 && (

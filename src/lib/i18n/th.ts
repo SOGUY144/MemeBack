@@ -71,6 +71,8 @@ export const th = {
   askAnotherQuestion: 'ถามคำถามใหม่',
   promote: 'ขึ้นจอ',
   promoted: 'อยู่บนจอ',
+  orderLocked: 'รอบทายเริ่มแล้ว เปลี่ยนมีมบนจอตอนนี้ไม่ได้',
+  retryAnalysis: 'วิเคราะห์ใหม่',
   answered: 'ตอบแล้ว',
   players: 'ผู้เล่น',
   teachingPoint: 'ประเด็นสอน',
@@ -79,8 +81,10 @@ export const th = {
 
   // projector
   scanToJoin: 'สแกนหรือพิมพ์รหัสเพื่อเข้าร่วม',
+  openThisUrl: 'หรือเปิดลิงก์นี้',
   waitingForPlayers: 'รอผู้เล่นเข้าห้อง…',
   submittedCount: (n: number, total: number) => `ส่งแล้ว ${n} / ${total}`,
+  analyzedCount: (n: number, total: number) => `อ่านคำตอบแล้ว ${n} / ${total}`,
   whatPrinciple: 'มีมนี้สื่อถึงหลักการอะไร',
   theAnswerWas: 'คำตอบคือ',
   originalAnswer: 'คำตอบต้นฉบับ',

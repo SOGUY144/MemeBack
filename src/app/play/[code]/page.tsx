@@ -205,6 +205,38 @@ export default function PlayPage() {
 
   // ---- phases ------------------------------------------------------------
 
+  // Telling a student their answer is off topic and to write it again, then
+  // giving them nowhere to type, was a dead end. The server keeps `answer:submit`
+  // open for exactly this case, so the retry is a real input in both the phase
+  // where the verdict lands (GENERATING) and the one where they read it.
+  const offTopicRetry =
+    mine?.verdict === 'off_topic' ? (
+      <Card className="bg-white">
+        <span className={`tag ${VERDICT_CLASS.off_topic}`}>{VERDICT_LABEL.off_topic}</span>
+        <h2 className="mt-3 text-2xl">{th.tryAgain}</h2>
+        <p className="mt-2 font-bold text-ink/70">{mine.conceptNote || th.offTopicHint}</p>
+        {stage === 'analyzing' ? (
+          <p className="mt-4 font-black text-ink/60">{th.stageAnalyzing}…</p>
+        ) : (
+          <>
+            <textarea
+              className="field mt-4 min-h-32 resize-none"
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value.slice(0, 600))}
+              placeholder={th.answerPlaceholder}
+            />
+            <button
+              className="btn btn-pop mt-3 w-full"
+              onClick={submitAnswer}
+              disabled={!answer.trim() || sending}
+            >
+              {sending ? th.submitting : th.submitAnswer}
+            </button>
+          </>
+        )}
+      </Card>
+    ) : null;
+
   return (
     <Shell>
       <TopBar code={code} nickname={nickname} rank={myRank?.rank ?? null} score={myRank?.score} />
@@ -254,7 +286,9 @@ export default function PlayPage() {
         </>
       )}
 
-      {phase === 'GENERATING' && (
+      {phase === 'GENERATING' && offTopicRetry}
+
+      {phase === 'GENERATING' && !offTopicRetry && (
         <Card className="text-center">
           <div className="pulse-ring mx-auto grid size-20 place-items-center rounded-full border-4 border-ink bg-sun text-3xl">
             🎬
@@ -272,11 +306,7 @@ export default function PlayPage() {
       {phase === 'PERSONAL_REVEAL' && mine && (
         <>
           {mine.verdict === 'off_topic' ? (
-            <Card className="bg-white">
-              <span className={`tag ${VERDICT_CLASS.off_topic}`}>{VERDICT_LABEL.off_topic}</span>
-              <h2 className="mt-3 text-2xl">{th.tryAgain}</h2>
-              <p className="mt-2 font-bold text-ink/70">{mine.conceptNote || th.offTopicHint}</p>
-            </Card>
+            offTopicRetry
           ) : (
             <>
               <Card className="p-3">
