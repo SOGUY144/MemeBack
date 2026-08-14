@@ -78,10 +78,15 @@ export const th = {
   teachingPoint: 'ประเด็นสอน',
   spaceToAdvance: 'กด Space เพื่อไปขั้นถัดไป',
   noTeacherKey: 'ไม่พบกุญแจครูในเครื่องนี้ ให้สร้างห้องใหม่จากหน้าแรก',
+  exitGame: 'ออกจากเกม',
+  teacherTipTitle: 'เคล็ดลับ',
+  teacherTipBody:
+    'ตั้งคำถามที่กระตุ้นให้ผู้เล่นคิดวิเคราะห์ จะช่วยให้การเรียนรู้สนุกและมีประสิทธิภาพมากขึ้น',
 
   // projector
   scanToJoin: 'สแกนหรือพิมพ์รหัสเพื่อเข้าร่วม',
-  openThisUrl: 'หรือเปิดลิงก์นี้',
+  joinWithFriends: 'เข้าร่วมเกมกับเพื่อน',
+  openThisUrl: 'หรือเปิดลิงก์นี้ในเบราว์เซอร์',
   waitingForPlayers: 'รอผู้เล่นเข้าห้อง…',
   submittedCount: (n: number, total: number) => `ส่งแล้ว ${n} / ${total}`,
   analyzedCount: (n: number, total: number) => `อ่านคำตอบแล้ว ${n} / ${total}`,

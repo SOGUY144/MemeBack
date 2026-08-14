@@ -75,9 +75,14 @@ export const en: Strings = {
   teachingPoint: 'Teaching point',
   spaceToAdvance: 'Press Space to advance',
   noTeacherKey: 'No teacher key on this device — create a room from the home page',
+  exitGame: 'Exit game',
+  teacherTipTitle: 'Tip',
+  teacherTipBody:
+    'Ask questions that push players to think critically — it makes learning more fun and effective.',
 
   scanToJoin: 'Scan or type the code to join',
-  openThisUrl: 'or open this link',
+  joinWithFriends: 'Join the game with friends',
+  openThisUrl: 'or open this link in your browser',
   waitingForPlayers: 'Waiting for players…',
   submittedCount: (n: number, total: number) => `${n} / ${total} submitted`,
   analyzedCount: (n: number, total: number) => `${n} / ${total} read`,

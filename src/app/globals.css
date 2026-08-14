@@ -176,6 +176,155 @@
     border-radius: 10px;
     background: var(--color-ink);
   }
+
+  /* lobby: the "scan to join" invite card on the projector */
+  .join-card {
+    background: linear-gradient(180deg, #1c2438 0%, #161d2d 100%);
+    border: 1px solid rgb(255 255 255 / 10%);
+    border-radius: 28px;
+    padding: clamp(1.5rem, 3vw, 2.5rem) clamp(1.5rem, 4vw, 3rem);
+    box-shadow: 0 24px 60px rgb(0 0 0 / 45%);
+  }
+
+  .join-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6em;
+    text-align: center;
+    font-weight: 900;
+    letter-spacing: 0.2em;
+    font-size: clamp(0.85rem, 1.4vw, 1.1rem);
+    color: var(--color-sun);
+    margin-bottom: clamp(1.25rem, 3vw, 2rem);
+  }
+
+  .join-card-dot {
+    color: rgb(255 217 61 / 45%);
+  }
+
+  .join-card-grid {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: clamp(1.5rem, 4vw, 2.5rem);
+  }
+
+  .join-card-invite {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    width: 7rem;
+  }
+
+  .join-card-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 4.5rem;
+    height: 4.5rem;
+    border-radius: 999px;
+    background: rgb(255 255 255 / 6%);
+    border: 1px solid rgb(255 255 255 / 12%);
+    color: rgb(255 255 255 / 80%);
+  }
+
+  .join-card-avatar svg {
+    width: 1.9rem;
+    height: 1.9rem;
+  }
+
+  .join-card-rule {
+    width: 2.5rem;
+    height: 2px;
+    background: var(--color-sun);
+  }
+
+  .join-card-invite-label {
+    color: var(--color-sun);
+    font-weight: 900;
+    font-size: 0.9rem;
+    text-align: center;
+    line-height: 1.3;
+  }
+
+  .join-card-code {
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    font-size: clamp(2.5rem, 7vw, 5.5rem);
+    line-height: 1;
+    color: #fff;
+    text-align: center;
+  }
+
+  .join-card-qr {
+    width: clamp(7rem, 12vw, 11rem);
+    height: clamp(7rem, 12vw, 11rem);
+    border-radius: 16px;
+    background: #fff;
+    padding: 0.6rem;
+  }
+
+  .join-card-qr--empty {
+    border: 2px dashed rgb(255 255 255 / 20%);
+  }
+
+  .join-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5em;
+    margin-top: clamp(1.25rem, 3vw, 2rem);
+    padding-top: clamp(1rem, 2.5vw, 1.75rem);
+    border-top: 1px solid rgb(255 255 255 / 10%);
+    font-size: clamp(1rem, 1.6vw, 1.15rem);
+    font-weight: 700;
+    color: rgb(255 255 255 / 55%);
+    text-align: center;
+  }
+
+  .join-card-footer svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    flex-shrink: 0;
+  }
+
+  .join-card-url {
+    color: var(--color-sun);
+    font-weight: 900;
+  }
+
+  @media (max-width: 720px) {
+    .join-card-grid {
+      grid-template-columns: 1fr;
+      justify-items: center;
+    }
+  }
+
+  /* teacher panel: soft rounded fields, distinct from the chunky .field style */
+  .host-field {
+    width: 100%;
+    padding: 0.7rem 0.9rem;
+    border-radius: 12px;
+    border: 1px solid rgb(17 19 24 / 8%);
+    background: #f5f6f8;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--color-ink);
+    outline: none;
+    transition:
+      box-shadow 120ms ease,
+      border-color 120ms ease,
+      background 120ms ease;
+  }
+
+  .host-field:focus {
+    border-color: var(--color-sun);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgb(255 217 61 / 35%);
+  }
 }
 
 @layer utilities {

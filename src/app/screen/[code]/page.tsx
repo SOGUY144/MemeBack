@@ -116,24 +116,57 @@ export default function ScreenPage() {
     <main className="screen-root flex min-h-dvh flex-col items-center justify-center gap-8 p-10">
       {phase === 'LOBBY' && (
         <>
-          <p className="text-2xl font-black tracking-widest text-sun/80">{th.scanToJoin}</p>
-          <div className="flex flex-wrap items-center justify-center gap-12">
-            <p className="screen-code">{code}</p>
-            {qr && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={qr}
-                alt="QR"
-                className="size-72 rounded-2xl border-8 border-ink bg-white p-2"
-              />
+          <div className="join-card w-full max-w-4xl">
+            <p className="join-card-header">
+              <span className="join-card-dot" aria-hidden="true">
+                ·
+              </span>
+              {th.scanToJoin}
+              <span className="join-card-dot" aria-hidden="true">
+                ·
+              </span>
+            </p>
+
+            <div className="join-card-grid">
+              <div className="join-card-invite">
+                <span className="join-card-avatar" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"
+                    />
+                  </svg>
+                </span>
+                <span className="join-card-rule" aria-hidden="true" />
+                <span className="join-card-invite-label">{th.joinWithFriends}</span>
+              </div>
+
+              <p className="join-card-code">{code}</p>
+
+              {qr ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={qr} alt="QR" className="join-card-qr" />
+              ) : (
+                <div className="join-card-qr join-card-qr--empty" />
+              )}
+            </div>
+
+            {joinUrl && (
+              <p className="join-card-footer">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"
+                  />
+                </svg>
+                {th.openThisUrl}{' '}
+                <span className="join-card-url">{joinUrl.replace(/^https?:\/\//, '')}</span>
+              </p>
             )}
           </div>
-          {joinUrl && (
-            <p className="text-center text-3xl font-black text-white/70">
-              {th.openThisUrl}{' '}
-              <span className="text-white">{joinUrl.replace(/^https?:\/\//, '')}</span>
-            </p>
-          )}
+
           <div className="flex max-w-5xl flex-wrap justify-center gap-3">
             {state?.players.map((p) => (
               <span
