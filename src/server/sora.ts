@@ -1,10 +1,9 @@
 /**
  * Thin client for OpenAI's Sora video-generation API. Same shape as
- * `src/server/kling.ts`. Two callers:
- *  - `scripts/generate-backgrounds.ts`, offline, never touches the request path.
- *  - `src/server/meme-upgrade.ts`, which upgrades exactly one meme per question
- *    (the opening CLASS_GUESS card) to a real AI video — see that file for why
- *    it's scoped that tightly.
+ * `src/server/kling.ts`. Only caller: `scripts/generate-backgrounds.ts`,
+ * offline, never touches the request path. Per-meme video generation
+ * (formerly src/server/meme-upgrade.ts) was replaced by a Giphy search
+ * (src/server/giphy.ts) — see that file for why.
  */
 
 const BASE = 'https://api.openai.com/v1/videos';

@@ -170,8 +170,6 @@ export type ServerToClient = {
   'answer:mine': (p: { answerId: string; rawText: string }) => void;
   'generation:status': (p: { rows: GenerationStatus[] }) => void;
   'guess:card': (p: GuessCard | null) => void;
-  /** The opening CLASS_GUESS meme got a real AI-video upgrade; swap it in place. */
-  'meme:upgraded': (p: { answerId: string; videoUrl: string }) => void;
   'guess:tally': (p: { answerId: string; counts: Record<string, number>; voted: number }) => void;
   'reveal:answer': (p: RevealPayload) => void;
   scoreboard: (p: { rows: ScoreRow[] }) => void;

@@ -45,9 +45,9 @@ async function main() {
     const shown = hostname === '0.0.0.0' ? 'localhost' : hostname;
     console.log(`\n  MemeBack พร้อมแล้ว → http://${shown}:${port}`);
     console.log(
-      process.env.ANTHROPIC_API_KEY
+      process.env.OPENAI_API_KEY
         ? '  AI: เปิดใช้งาน'
-        : '  AI: ปิดอยู่ (ไม่มี ANTHROPIC_API_KEY) — ทุกคำตอบจะใช้ฉากสำรอง\n',
+        : '  AI: ปิดอยู่ (ไม่มี OPENAI_API_KEY) — ทุกคำตอบจะใช้ฉากสำรอง\n',
     );
   });
 }

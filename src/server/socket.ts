@@ -7,8 +7,7 @@ import { prisma } from '@/lib/db';
 import { SceneSpec } from '@/lib/ai/scene-schema';
 import { analyzeAnswer, generateDistractors } from '@/server/ai';
 import { suggestPromotions } from '@/server/promotion';
-import { soraAvailable } from '@/server/sora';
-import { isMemeStyle, upgradeAnswerToAiVideo, type MemeStyle } from '@/server/meme-upgrade';
+import { buildGiphyQuery, isMemeStyle, searchMemeGif } from '@/server/giphy';
 import type { Verdict } from '@/lib/meme/vocab';
 import { AUTHOR_BONUS, authorEarnedBonus, guessPoints, verdictPoints } from '@/server/scoring';
 import {
@@ -341,12 +340,30 @@ async function runAnalysis(io: IO, code: string, answerId: string) {
 
     status.stage = spec.verdict === 'off_topic' ? 'done' : 'composing';
     status.verdict = spec.verdict;
+
+    // Prefer a real Giphy GIF that matches the scene's actions over the
+    // sprite render. off_topic never gets a meme at all (offTopicRetry takes
+    // over client-side), so there's nothing worth searching for there. If
+    // Giphy has no key, no match, or errors out, memeUrl stays null and the
+    // client's usual sprite-render-and-upload path runs exactly as before —
+    // this only ever adds a faster, free option in front of it.
+    let memeUrl: string | null = null;
+    if (spec.verdict !== 'off_topic') {
+      const style = isMemeStyle(answer.question.memeStyle) ? answer.question.memeStyle : 'default';
+      memeUrl = await searchMemeGif(buildGiphyQuery(spec, style));
+      if (memeUrl) {
+        await prisma.answer.update({ where: { id: answerId }, data: { memeUrl } });
+        status.hasFile = true;
+        status.stage = 'done';
+      }
+    }
+
     rt.generation.set(answerId, status);
     await pushGenerationStatus(io, code);
 
     io.to(playerChannel(answer.playerId)).emit('meme:mine', {
       answerId,
-      memeUrl: null,
+      memeUrl,
       scene: spec.scene,
       verdict: spec.verdict,
       conceptNote: spec.concept_note,
@@ -458,34 +475,6 @@ async function buildGuessCard(code: string, index: number): Promise<GuessCard | 
     openedAt: rt.guessOpenedAt,
     durationMs: GUESS_DURATION_MS,
   };
-}
-
-/**
- * Fire-and-forget. Never throws, never blocks the phase transition it's
- * called from — CLASS_GUESS opens on the sprite meme exactly as before, and
- * this only ever swaps it out later if a real video shows up.
- */
-async function tryUpgradeToAiVideo(
-  io: IO,
-  code: string,
-  answerId: string,
-  style: MemeStyle,
-) {
-  if (!soraAvailable()) return;
-  try {
-    const answer = await prisma.answer.findUnique({ where: { id: answerId } });
-    const spec = answer ? parseSpec(answer.analysis) : null;
-    if (!answer || !spec) return;
-
-    const videoUrl = await upgradeAnswerToAiVideo(answerId, spec, style);
-    await prisma.answer.update({ where: { id: answerId }, data: { aiVideoUrl: videoUrl } });
-    io.to(roomChannel(code)).emit('meme:upgraded', { answerId, videoUrl });
-  } catch (err) {
-    console.warn(
-      '[meme-upgrade] falling back to the sprite meme:',
-      err instanceof Error ? err.message : err,
-    );
-  }
 }
 
 async function openGuessRound(io: IO, code: string, index: number) {
@@ -621,11 +610,6 @@ async function enterPhase(io: IO, code: string, phase: Phase) {
       const question = room ? await currentQuestion(room.id) : null;
       if (question) await ensureGuessOrder(code, question.id);
       rt.guessIndex = 0;
-      // Only the meme that opens the round — the whole room is looking at it
-      // together right now — gets the real-AI-video treatment. See
-      // meme-upgrade.ts for why this stays this narrow.
-      const opener = rt.guessOrder[0];
-      if (opener) void tryUpgradeToAiVideo(io, code, opener, isMemeStyle(question?.memeStyle) ? question.memeStyle : 'default');
     }
     await openGuessRound(io, code, rt.guessIndex);
   }

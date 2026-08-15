@@ -64,7 +64,7 @@ export const th = {
   targetConcept: 'หลักการเป้าหมาย',
   conceptHint: 'คำอธิบายของครู (ไม่บังคับ)',
   subject: 'วิชา',
-  memeStyle: 'สไตล์มีม (สำหรับมีมเปิดรอบทาย)',
+  memeStyle: 'สไตล์มีม',
   memeStyleDefault: 'ธรรมดา',
   memeStyleCartoon: 'การ์ตูนสดใส',
   memeStyleBrainrot: 'มีมฮิต (Brainrot)',

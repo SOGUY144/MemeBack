@@ -61,7 +61,7 @@ export const en: Strings = {
   targetConcept: 'Target concept',
   conceptHint: 'Your own definition (optional)',
   subject: 'Subject',
-  memeStyle: 'Meme style (CLASS_GUESS opener only)',
+  memeStyle: 'Meme style',
   memeStyleDefault: 'Default',
   memeStyleCartoon: 'Bright cartoon',
   memeStyleBrainrot: 'Trending (brainrot)',

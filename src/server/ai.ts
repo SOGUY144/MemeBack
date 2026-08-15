@@ -1,29 +1,29 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { DISTRACTORS, SceneSpec, fallbackScene } from '@/lib/ai/scene-schema';
 
 /**
- * The whole LLM surface of MemeBack: one call per answer to turn it into a
- * storyboard, and one call per question to build guess options.
+ * The whole text-LLM surface of MemeBack: one call per answer to turn it into
+ * a storyboard, and one call per question to build guess options.
+ *
+ * Runs on OpenAI's Chat Completions API — the same OPENAI_API_KEY already
+ * used for the Sora background generator (src/server/sora.ts), so the app
+ * only ever needs one AI account, not two.
  *
  * Everything here is failure-tolerant on purpose — a classroom of 30 students
  * cannot be held hostage by one slow request, and the app must stay fully
  * playable with no API key at all.
  */
 
-const MODEL = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-5';
+const BASE = 'https://api.openai.com/v1/chat/completions';
+const MODEL = process.env.OPENAI_TEXT_MODEL ?? 'gpt-4o-mini';
 const TIMEOUT_MS = 12_000;
 const MAX_PARALLEL = 5;
 
-let client: Anthropic | null = null;
-function anthropic(): Anthropic | null {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return null;
-  client ??= new Anthropic({ apiKey: key, maxRetries: 0 });
-  return client;
+function apiKey(): string | null {
+  return process.env.OPENAI_API_KEY || null;
 }
 
 export function llmAvailable(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+  return Boolean(apiKey());
 }
 
 // ---------------------------------------------------------------------------
@@ -119,24 +119,40 @@ function extractJson(text: string): unknown {
 }
 
 async function callModel(system: string, user: string, maxTokens: number): Promise<unknown> {
-  const ai = anthropic();
-  if (!ai) throw new Error('no-api-key');
+  const key = apiKey();
+  if (!key) throw new Error('no-api-key');
 
-  const res = await ai.messages.create(
-    {
-      model: MODEL,
-      max_tokens: maxTokens,
-      system,
-      messages: [{ role: 'user', content: user }],
-    },
-    { timeout: TIMEOUT_MS },
-  );
-
-  const text = res.content
-    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('');
-  return extractJson(text);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(BASE, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: maxTokens,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`openai chat failed: ${res.status} ${await res.text()}`);
+    }
+    const data = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const text = data.choices?.[0]?.message?.content ?? '';
+    return extractJson(text);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ---------------------------------------------------------------------------

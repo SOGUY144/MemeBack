@@ -16,7 +16,6 @@
     "postinstall": "node scripts/copy-gif-worker.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.71.0",
     "@prisma/client": "^6.19.0",
     "gif.js": "^0.2.0",
     "mp4-muxer": "^5.2.1",

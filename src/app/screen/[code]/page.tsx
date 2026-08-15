@@ -83,18 +83,14 @@ export default function ScreenPage() {
       setTally({ counts: p.counts, voted: p.voted });
     const onReveal = (r: RevealPayload) => setReveal(r);
     const onScores = (p: { rows: ScoreRow[] }) => setScores(p.rows);
-    const onUpgraded = (p: { answerId: string; videoUrl: string }) =>
-      setCard((c) => (c && c.answerId === p.answerId ? { ...c, memeUrl: p.videoUrl } : c));
 
     socket.on('guess:card', onCard);
     socket.on('guess:tally', onTally);
-    socket.on('meme:upgraded', onUpgraded);
     socket.on('reveal:answer', onReveal);
     socket.on('scoreboard', onScores);
     return () => {
       socket.off('guess:card', onCard);
       socket.off('guess:tally', onTally);
-      socket.off('meme:upgraded', onUpgraded);
       socket.off('reveal:answer', onReveal);
       socket.off('scoreboard', onScores);
     };
