@@ -84,20 +84,28 @@
     font-weight: 900;
     font-size: 1.05rem;
     cursor: pointer;
+    /* A springy release is what sells "this is alive": press flattens the
+       button instantly, but letting go overshoots past resting scale before
+       settling. Comes free on every .btn, everywhere in the app — no JS. */
     transition:
-      transform 90ms ease,
-      box-shadow 90ms ease,
+      transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
+      box-shadow 140ms ease,
       filter 90ms ease;
     text-align: center;
   }
 
   .btn:hover:not(:disabled) {
     filter: brightness(1.04);
+    transform: translateY(-2px);
+    box-shadow: 6px 7px 0 var(--color-ink);
   }
 
   .btn:active:not(:disabled) {
-    transform: translate(5px, 5px);
+    transform: translate(5px, 5px) scale(0.97);
     box-shadow: 0 0 0 var(--color-ink);
+    transition:
+      transform 60ms ease,
+      box-shadow 60ms ease;
   }
 
   .btn:disabled {
@@ -134,10 +142,14 @@
     background: #fff;
     font-weight: 700;
     outline: none;
+    transition:
+      box-shadow 140ms ease,
+      transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .field:focus {
     box-shadow: 0 0 0 4px var(--color-sun);
+    transform: scale(1.01);
   }
 
   .tag {
@@ -150,6 +162,18 @@
     font-weight: 900;
     font-size: 0.8rem;
     background: #fff;
+  }
+
+  button.tag,
+  a.tag {
+    cursor: pointer;
+    transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  button.tag:active:not(:disabled),
+  a.tag:active {
+    transform: scale(0.93);
+    transition: transform 60ms ease;
   }
 
   /* projector: readable from the back of the room */
@@ -325,6 +349,68 @@
     background: #fff;
     box-shadow: 0 0 0 3px rgb(255 217 61 / 35%);
   }
+
+  /* the big PIN-style room-code input on the landing screen */
+  .pin-field {
+    width: 100%;
+    padding: 1.15rem 1rem;
+    border: 4px solid var(--color-ink);
+    border-radius: 20px;
+    background: #fff;
+    font-weight: 900;
+    font-size: clamp(1.6rem, 7vw, 2.85rem);
+    letter-spacing: 0.16em;
+    text-align: center;
+    text-transform: uppercase;
+    outline: none;
+    transition:
+      box-shadow 140ms ease,
+      transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .pin-field::placeholder {
+    color: rgb(17 19 24 / 22%);
+    letter-spacing: 0.08em;
+  }
+
+  .pin-field:focus {
+    box-shadow: 6px 6px 0 var(--color-ink);
+    transform: translate(-2px, -2px) scale(1.015);
+  }
+
+  /* join / create switch on the landing card */
+  .tab-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.3rem;
+    padding: 0.3rem;
+    border: 3px solid var(--color-ink);
+    border-radius: 16px;
+    background: var(--color-paper-2);
+  }
+
+  .tab-switch button {
+    padding: 0.65rem 0.5rem;
+    border-radius: 12px;
+    font-weight: 900;
+    font-size: 0.85rem;
+    color: rgb(17 19 24 / 55%);
+    cursor: pointer;
+    transition:
+      background 120ms ease,
+      color 120ms ease,
+      transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .tab-switch button:active {
+    transform: scale(0.94);
+    transition: transform 60ms ease;
+  }
+
+  .tab-switch button[data-active='true'] {
+    background: var(--color-ink);
+    color: #fff;
+  }
 }
 
 @layer utilities {
@@ -356,6 +442,24 @@
     }
     100% {
       box-shadow: 0 0 0 22px rgb(255 217 61 / 0%);
+    }
+  }
+
+  .drift {
+    animation: drift 9s ease-in-out infinite;
+  }
+
+  .drift-slow {
+    animation: drift 13s ease-in-out infinite;
+  }
+
+  @keyframes drift {
+    0%,
+    100% {
+      transform: translate(0, 0) rotate(0deg);
+    }
+    50% {
+      transform: translate(2.5%, -3%) rotate(4deg);
     }
   }
 }

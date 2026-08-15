@@ -90,6 +90,24 @@ describe('suggestPromotions', () => {
     expect(new Set(picked).size).toBe(picked.length);
   });
 
+  it('does not collapse every fallback scene into one meme (no API key case)', () => {
+    const answers: PromotionCandidate[] = ['a', 'b', 'c'].map((id) => ({
+      answerId: id,
+      verdict: 'partial',
+      spec: spec({ clips: ['think_bubble'], setting: 'void' }),
+    }));
+    const picked = suggestPromotions(answers);
+    expect(picked).toEqual(expect.arrayContaining(['a', 'b', 'c']));
+  });
+
+  it('still collapses identical non-fallback storyboards', () => {
+    const picked = suggestPromotions([
+      candidate('a', 'correct', spec({ clips: ['think_bubble'], setting: 'classroom' })),
+      candidate('b', 'correct', spec({ clips: ['think_bubble'], setting: 'classroom' })),
+    ]);
+    expect(picked.length).toBe(1);
+  });
+
   it('still gives a small class a round to play', () => {
     expect(suggestPromotions([candidate('only', 'partial', spec({ clips: ['sweat'] }))])).toEqual([
       'only',

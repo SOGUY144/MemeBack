@@ -7,6 +7,8 @@ import { prisma } from '@/lib/db';
 import { SceneSpec } from '@/lib/ai/scene-schema';
 import { analyzeAnswer, generateDistractors } from '@/server/ai';
 import { suggestPromotions } from '@/server/promotion';
+import { soraAvailable } from '@/server/sora';
+import { isMemeStyle, upgradeAnswerToAiVideo, type MemeStyle } from '@/server/meme-upgrade';
 import type { Verdict } from '@/lib/meme/vocab';
 import { AUTHOR_BONUS, authorEarnedBonus, guessPoints, verdictPoints } from '@/server/scoring';
 import {
@@ -84,6 +86,21 @@ async function uniqueNickname(roomId: string, wanted: string): Promise<string> {
     if (!taken.has(candidate)) return candidate;
   }
   return wanted;
+}
+
+/**
+ * For `teacher:submit-answer` — a student with no device of their own, whose
+ * answer the teacher is typing in on their behalf. Unlike a device joining
+ * (which always mints a fresh Player, since two different phones landing on
+ * the same typed nickname are almost certainly two different people), the
+ * teacher re-typing the same name *is* the identity signal: it is how they
+ * keep "สมชาย" the same "สมชาย" — and his score running — across questions.
+ */
+async function resolveNamedPlayer(roomId: string, nickname: string) {
+  const existing = await prisma.player.findFirst({ where: { roomId, nickname } });
+  if (existing) return existing;
+  const unique = await uniqueNickname(roomId, nickname);
+  return prisma.player.create({ data: { roomId, nickname: unique } });
 }
 
 export function newRoomCode(): string {
@@ -443,6 +460,34 @@ async function buildGuessCard(code: string, index: number): Promise<GuessCard | 
   };
 }
 
+/**
+ * Fire-and-forget. Never throws, never blocks the phase transition it's
+ * called from — CLASS_GUESS opens on the sprite meme exactly as before, and
+ * this only ever swaps it out later if a real video shows up.
+ */
+async function tryUpgradeToAiVideo(
+  io: IO,
+  code: string,
+  answerId: string,
+  style: MemeStyle,
+) {
+  if (!soraAvailable()) return;
+  try {
+    const answer = await prisma.answer.findUnique({ where: { id: answerId } });
+    const spec = answer ? parseSpec(answer.analysis) : null;
+    if (!answer || !spec) return;
+
+    const videoUrl = await upgradeAnswerToAiVideo(answerId, spec, style);
+    await prisma.answer.update({ where: { id: answerId }, data: { aiVideoUrl: videoUrl } });
+    io.to(roomChannel(code)).emit('meme:upgraded', { answerId, videoUrl });
+  } catch (err) {
+    console.warn(
+      '[meme-upgrade] falling back to the sprite meme:',
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
 async function openGuessRound(io: IO, code: string, index: number) {
   const rt = runtime(code);
   rt.guessIndex = index;
@@ -576,6 +621,11 @@ async function enterPhase(io: IO, code: string, phase: Phase) {
       const question = room ? await currentQuestion(room.id) : null;
       if (question) await ensureGuessOrder(code, question.id);
       rt.guessIndex = 0;
+      // Only the meme that opens the round — the whole room is looking at it
+      // together right now — gets the real-AI-video treatment. See
+      // meme-upgrade.ts for why this stays this narrow.
+      const opener = rt.guessOrder[0];
+      if (opener) void tryUpgradeToAiVideo(io, code, opener, isMemeStyle(question?.memeStyle) ? question.memeStyle : 'default');
     }
     await openGuessRound(io, code, rt.guessIndex);
   }
@@ -699,6 +749,7 @@ export function registerSocketHandlers(io: IO) {
         }
 
         const subject = (p.subject ?? 'science').trim() || 'science';
+        const memeStyle = isMemeStyle(p.memeStyle) ? p.memeStyle : 'default';
         const question = await prisma.question.create({
           data: {
             roomId: room.id,
@@ -706,6 +757,7 @@ export function registerSocketHandlers(io: IO) {
             targetConcept,
             conceptHint: p.conceptHint?.trim() || null,
             subject,
+            memeStyle,
             distractors: [],
           },
         });
@@ -778,6 +830,55 @@ export function registerSocketHandlers(io: IO) {
         void runAnalysis(io, code, answer.id);
       } catch (err) {
         console.error('[socket] answer:submit failed:', err);
+        ack?.({ ok: false, error: 'ส่งคำตอบไม่สำเร็จ' });
+      }
+    });
+
+    // Answer-only proxy for a student with no device: the teacher walks the
+    // room, hears the answer, and types it in here under that student's name.
+    // Everything past this point — analysis, sprite meme, promotion, scoring —
+    // is the exact same pipeline as a self-submitted answer; the only
+    // difference is who typed it in. Guessing still happens on real devices —
+    // this does not touch CLASS_GUESS.
+    socket.on('teacher:submit-answer', async (p, ack) => {
+      const code = socket.data.roomCode;
+      if (!code || !socket.data.isTeacher) return ack?.({ ok: false, error: 'ไม่มีสิทธิ์' });
+      try {
+        const room = await prisma.room.findUnique({ where: { code } });
+        if (!room) return ack?.({ ok: false, error: 'ไม่พบห้อง' });
+        if (room.phase !== 'ANSWERING') {
+          return ack?.({ ok: false, error: 'ยังไม่ถึงเวลาตอบ' });
+        }
+
+        const nickname = String(p.nickname ?? '').trim().slice(0, 20);
+        const text = String(p.text ?? '').trim().slice(0, 600);
+        if (!nickname) return ack?.({ ok: false, error: 'ใส่ชื่อนักเรียนก่อนนะ' });
+        if (!text) return ack?.({ ok: false, error: 'พิมพ์คำตอบก่อนนะ' });
+
+        const question = await prisma.question.findFirst({
+          where: { id: p.questionId, roomId: room.id },
+        });
+        if (!question) return ack?.({ ok: false, error: 'ไม่พบคำถามนี้' });
+
+        const player = await resolveNamedPlayer(room.id, nickname);
+        const existing = await prisma.answer.findFirst({
+          where: { questionId: question.id, playerId: player.id },
+        });
+
+        const answer = existing
+          ? await prisma.answer.update({
+              where: { id: existing.id },
+              data: { rawText: text, memeUrl: null },
+            })
+          : await prisma.answer.create({
+              data: { questionId: question.id, playerId: player.id, rawText: text },
+            });
+
+        ack?.({ ok: true, answerId: answer.id, nickname: player.nickname });
+        await pushRoomState(io, code);
+        void runAnalysis(io, code, answer.id);
+      } catch (err) {
+        console.error('[socket] teacher:submit-answer failed:', err);
         ack?.({ ok: false, error: 'ส่งคำตอบไม่สำเร็จ' });
       }
     });

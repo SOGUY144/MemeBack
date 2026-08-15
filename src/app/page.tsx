@@ -7,6 +7,7 @@ import { th } from '@/lib/i18n/th';
 
 export default function LandingPage() {
   const router = useRouter();
+  const [tab, setTab] = useState<'join' | 'create'>('join');
   const [code, setCode] = useState('');
   const [nickname, setNickname] = useState('');
   const [busy, setBusy] = useState<'join' | 'create' | null>(null);
@@ -70,86 +71,123 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-[#f4f5f8]">
-      <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col justify-center gap-6 px-5 py-10">
+    <div className="relative min-h-dvh overflow-hidden bg-paper">
+      {/* atmosphere: a handful of soft drifting color blobs, no purple in sight */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="drift absolute -left-24 -top-20 size-72 rounded-full bg-mint/35 blur-3xl sm:size-96" />
+        <div className="drift-slow absolute -right-16 top-10 size-64 rounded-full bg-sun/50 blur-3xl sm:size-80" />
+        <div className="drift-slow absolute -bottom-24 -left-10 size-72 rounded-full bg-sky/25 blur-3xl sm:size-96" />
+        <div className="drift absolute -bottom-16 -right-20 size-64 rounded-full bg-pop/25 blur-3xl sm:size-80" />
+      </div>
+
+      <main className="relative mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center gap-7 px-5 py-10">
         <header className="text-center">
-          <h1 className="wiggle text-6xl font-black text-pop sm:text-7xl">{th.appName}</h1>
-          <p className="mt-3 text-base font-bold text-ink/60">{th.tagline}</p>
+          <h1 className="wiggle text-4xl font-black text-pop sm:text-5xl">{th.appName}</h1>
+          <p className="mt-2 text-sm font-bold text-ink/60">{th.tagline}</p>
         </header>
 
-        <form
-          onSubmit={handleJoin}
-          className="flex flex-col gap-4 rounded-3xl bg-white p-6 shadow-[0_10px_30px_rgba(17,19,24,0.08)]"
-        >
-          <h2 className="text-2xl font-black text-ink">{th.joinTitle}</h2>
-
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-black uppercase tracking-wide text-ink/50">
-              {th.roomCode}
-            </span>
-            <input
-              className="host-field text-center text-2xl tracking-[0.25em] uppercase"
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase().slice(0, 6))}
-              placeholder={th.roomCodePlaceholder}
-              inputMode="text"
-              autoCapitalize="characters"
-              autoComplete="off"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-black uppercase tracking-wide text-ink/50">
-              {th.nickname}
-            </span>
-            <input
-              className="host-field"
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value.slice(0, 20))}
-              placeholder={th.nicknamePlaceholder}
-              autoComplete="off"
-            />
-          </label>
-
-          {error && (
-            <p className="rounded-xl bg-berry/10 px-3 py-2.5 text-sm font-bold text-berry">
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            className="flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[#ff9d4d] to-[#ff6b1a] px-6 py-3.5 text-lg font-black text-white shadow-[0_10px_24px_rgba(255,107,26,0.35)] transition hover:brightness-105 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:brightness-100"
-            disabled={!joinable || busy !== null}
-          >
-            {busy === 'join' ? th.joining : th.join}
-          </button>
-        </form>
-
-        <div className="flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={handleCreate}
-            className="flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[#3fd6a8] to-[#16c79a] px-6 py-3.5 text-lg font-black text-[#06281f] shadow-[0_10px_24px_rgba(22,199,154,0.3)] transition hover:brightness-105 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:brightness-100"
-            disabled={busy !== null}
-          >
-            {busy === 'create' ? th.creatingRoom : th.createRoom}
-          </button>
-
-          {/* Last resort: the room exists, so give the teacher a link they can
-              click even if neither navigation went through. */}
-          {createdCode && (
-            <a
-              className="flex w-full items-center justify-center rounded-2xl bg-white px-6 py-3 text-base font-black text-ink shadow-[0_10px_24px_rgba(17,19,24,0.08)] transition hover:brightness-105"
-              href={`/host/${createdCode}`}
+        <div className="chunk w-full bg-white p-6">
+          <div className="tab-switch" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              data-active={tab === 'join'}
+              aria-selected={tab === 'join'}
+              onClick={() => setTab('join')}
             >
-              เข้าห้อง {createdCode}
-            </a>
+              {th.joinTabStudent}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              data-active={tab === 'create'}
+              aria-selected={tab === 'create'}
+              onClick={() => setTab('create')}
+            >
+              {th.joinTabTeacher}
+            </button>
+          </div>
+
+          {tab === 'join' ? (
+            <form onSubmit={handleJoin} className="mt-5 flex flex-col gap-4">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-black uppercase tracking-wide text-ink/50">
+                  {th.roomCode}
+                </span>
+                <input
+                  className="pin-field"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.toUpperCase().slice(0, 6))}
+                  placeholder={th.roomCodePlaceholder}
+                  inputMode="text"
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  autoFocus
+                />
+              </label>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-black uppercase tracking-wide text-ink/50">
+                  {th.nickname}
+                </span>
+                <input
+                  className="field"
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value.slice(0, 20))}
+                  placeholder={th.nicknamePlaceholder}
+                  autoComplete="off"
+                />
+              </label>
+
+              {error && (
+                <p className="chunk-sm bg-berry/10 px-3 py-2.5 text-sm font-bold text-berry">
+                  {error}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                className="btn btn-pop w-full py-4 text-lg"
+                disabled={!joinable || busy !== null}
+              >
+                {busy === 'join' ? th.joining : th.join}
+              </button>
+            </form>
+          ) : (
+            <div className="mt-5 flex flex-col gap-4">
+              <p className="text-center text-sm font-bold leading-relaxed text-ink/60">
+                {th.createRoomHint}
+              </p>
+
+              {error && (
+                <p className="chunk-sm bg-berry/10 px-3 py-2.5 text-sm font-bold text-berry">
+                  {error}
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={handleCreate}
+                className="btn btn-mint w-full py-4 text-lg"
+                disabled={busy !== null}
+              >
+                {busy === 'create' ? th.creatingRoom : th.createRoomShort}
+              </button>
+
+              {/* Last resort: the room exists, so give the teacher a link they can
+                  click even if neither navigation went through. */}
+              {createdCode && (
+                <a className="btn btn-ghost w-full" href={`/host/${createdCode}`}>
+                  เข้าห้อง {createdCode}
+                </a>
+              )}
+            </div>
           )}
-          <p className="text-center text-xs font-bold text-ink/45">
-            ครูสร้างห้อง → เปิดจอฉาย → นักเรียนเข้าด้วยรหัสห้อง
-          </p>
         </div>
+
+        <p className="text-center text-xs font-bold text-ink/40">
+          ครูสร้างห้อง → เปิดจอฉาย → นักเรียนเข้าด้วยรหัสห้อง
+        </p>
       </main>
     </div>
   );

@@ -245,6 +245,12 @@ export default function HostPage() {
   const [targetConcept, setTargetConcept] = useState("Newton's Third Law");
   const [conceptHint, setConceptHint] = useState('ทุกแรงกิริยามีแรงปฏิกิริยาขนาดเท่ากันแต่ทิศตรงข้าม');
   const [subject, setSubject] = useState('science');
+  const [memeStyle, setMemeStyle] = useState<'default' | 'cartoon' | 'brainrot'>('default');
+
+  const [proxyNickname, setProxyNickname] = useState('');
+  const [proxyText, setProxyText] = useState('');
+  const [proxySending, setProxySending] = useState(false);
+  const [proxyNotice, setProxyNotice] = useState<string | null>(null);
 
   const phase = state?.phase ?? 'LOBBY';
 
@@ -300,10 +306,30 @@ export default function HostPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [action, go, hasMoreMemes, socket]);
 
+  function submitForStudent() {
+    const questionId = state?.question?.id;
+    if (!questionId || !proxyNickname.trim() || !proxyText.trim() || proxySending) return;
+    setProxySending(true);
+    setProxyNotice(null);
+    socket.emit(
+      'teacher:submit-answer',
+      { questionId, nickname: proxyNickname.trim(), text: proxyText.trim() },
+      (res) => {
+        setProxySending(false);
+        if (res.ok) {
+          setProxyNotice(th.proxySent(res.nickname));
+          setProxyText('');
+        } else {
+          setProxyNotice(res.error);
+        }
+      },
+    );
+  }
+
   function postQuestion() {
     socket.emit(
       'teacher:question',
-      { prompt, targetConcept, conceptHint, subject },
+      { prompt, targetConcept, conceptHint, subject, memeStyle },
       (res) => {
         if (!res.ok) setNotice(res.error);
         else setNotice(null);
@@ -313,8 +339,8 @@ export default function HostPage() {
 
   if (error === 'no-teacher-key') {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-[#f4f5f8] p-6">
-        <div className="max-w-md rounded-3xl bg-white p-6 text-center shadow-[0_10px_30px_rgba(17,19,24,0.08)]">
+      <div className="flex min-h-dvh items-center justify-center bg-paper p-6">
+        <div className="chunk max-w-md bg-white p-6 text-center">
           <p className="font-black text-ink">{th.noTeacherKey}</p>
         </div>
       </div>
@@ -322,41 +348,33 @@ export default function HostPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-[#f4f5f8] p-4">
+    <div className="min-h-dvh bg-paper p-4">
       <main className="mx-auto grid w-full max-w-6xl gap-4 lg:grid-cols-[1.1fr_1fr]">
         {/* header spans both columns */}
-        <header className="flex flex-wrap items-center justify-between gap-3 rounded-3xl bg-gradient-to-br from-[#ffe9a8] to-[#ffcf5c] px-6 py-4 shadow-[0_10px_30px_rgba(255,184,28,0.25)] lg:col-span-2">
+        <header className="chunk flex flex-wrap items-center justify-between gap-3 bg-sun px-6 py-4 lg:col-span-2">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-3xl font-black tracking-[0.08em] text-ink">{code}</span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 text-sm font-black text-ink shadow-sm">
+            <span className="tag bg-white">
               <span className="size-2 rounded-full bg-mint" aria-hidden="true" />
               {PHASE_LABEL[phase]}
             </span>
-            {!connected && (
-              <span className="inline-flex items-center rounded-full bg-berry px-3 py-1.5 text-sm font-black text-white">
-                {th.disconnected}
-              </span>
-            )}
+            {!connected && <span className="tag bg-berry text-white">{th.disconnected}</span>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1.5 text-sm font-black text-ink shadow-sm">
+            <span className="tag bg-white">
               <IconPeople className="size-4" />
               {th.players} {state?.playerCount ?? 0}
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1.5 text-sm font-black text-ink shadow-sm">
+            <span className="tag bg-white">
               <IconChat className="size-4" />
               {th.answered} {state?.answeredCount ?? 0}
             </span>
-            <a
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1.5 text-sm font-black text-ink shadow-sm transition hover:bg-white"
-              href={`/screen/${code}`}
-              target="_blank"
-            >
+            <a className="tag bg-white transition hover:brightness-105" href={`/screen/${code}`} target="_blank">
               <IconMonitor className="size-4" />
               {th.openProjector}
             </a>
             <button
-              className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-1.5 text-sm font-black text-white transition hover:bg-ink/90"
+              className="tag bg-ink text-white transition hover:brightness-110"
               onClick={() => router.push('/')}
             >
               <IconExit className="size-4" />
@@ -367,51 +385,42 @@ export default function HostPage() {
 
         {/* left: controls */}
         <div className="flex flex-col gap-4">
-          <section className="rounded-3xl bg-white p-5 shadow-[0_10px_30px_rgba(17,19,24,0.06)]">
+          <section className="chunk bg-white p-5">
             <div className="flex flex-col gap-3">
               {action && (
-                <button
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#ff9d4d] to-[#ff6b1a] px-6 py-4 text-lg font-black text-white shadow-[0_10px_24px_rgba(255,107,26,0.35)] transition hover:brightness-105 active:scale-[0.99]"
-                  onClick={() => go(action.to)}
-                >
+                <button className="btn btn-pop w-full gap-2 py-4 text-lg" onClick={() => go(action.to)}>
                   <IconPlay className="size-5" />
                   {action.label}
                 </button>
               )}
               {hasMoreMemes && (
                 <button
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-sky px-6 py-4 text-lg font-black text-white transition hover:brightness-105"
+                  className="btn btn-sky w-full gap-2 py-4 text-lg"
                   onClick={() => socket.emit('teacher:guess-next', {})}
                 >
                   {th.nextMeme} ({guessIndex + 2}/{guessTotal})
                 </button>
               )}
               {phase === 'REVEAL' && (
-                <button
-                  className="w-full rounded-2xl border-2 border-ink/10 px-6 py-3 text-base font-black text-ink/70 transition hover:bg-ink/5"
-                  onClick={() => go('ANSWERING')}
-                >
+                <button className="btn btn-ghost w-full" onClick={() => go('ANSWERING')}>
                   {th.askAnotherQuestion}
                 </button>
               )}
               {phase === 'PERSONAL_REVEAL' && (
-                <button
-                  className="w-full rounded-2xl border-2 border-ink/10 px-6 py-3 text-base font-black text-ink/70 transition hover:bg-ink/5"
-                  onClick={() => go('SCOREBOARD')}
-                >
+                <button className="btn btn-ghost w-full" onClick={() => go('SCOREBOARD')}>
                   {th.showScoreboard}
                 </button>
               )}
             </div>
             <p className="mt-3 text-center text-xs font-bold text-ink/40">{th.spaceToAdvance}</p>
             {notice && (
-              <p className="mt-3 rounded-xl bg-berry/10 px-3 py-2 text-sm font-bold text-berry">
+              <p className="chunk-sm mt-3 bg-berry/10 px-3 py-2 text-sm font-bold text-berry">
                 {notice}
               </p>
             )}
           </section>
 
-          <section className="rounded-3xl bg-white p-5 shadow-[0_10px_30px_rgba(17,19,24,0.06)]">
+          <section className="chunk bg-white p-5">
             <h2 className="flex items-center gap-2.5 text-lg font-black text-ink">
               <span className="flex size-8 items-center justify-center rounded-full bg-sun/40 text-ink/70">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="size-4">
@@ -457,24 +466,83 @@ export default function HostPage() {
                   <option value="social">สังคมศึกษา</option>
                 </select>
               </FormRow>
-              <button
-                className="flex items-center justify-center gap-2 rounded-2xl bg-mint px-6 py-3.5 text-base font-black text-[#06281f] shadow-[0_10px_24px_rgba(22,199,154,0.3)] transition hover:brightness-105"
-                onClick={postQuestion}
-              >
+              <FormRow icon={<IconSparkle className="size-[18px]" />} tone="sky" label={th.memeStyle}>
+                <select
+                  className="host-field"
+                  value={memeStyle}
+                  onChange={(e) => setMemeStyle(e.target.value as 'default' | 'cartoon' | 'brainrot')}
+                >
+                  <option value="default">{th.memeStyleDefault}</option>
+                  <option value="cartoon">{th.memeStyleCartoon}</option>
+                  <option value="brainrot">{th.memeStyleBrainrot}</option>
+                </select>
+              </FormRow>
+              <button className="btn btn-mint w-full gap-2" onClick={postQuestion}>
                 <IconSend className="size-4" />
                 {th.postQuestion}
               </button>
             </div>
           </section>
 
+          {phase === 'ANSWERING' && state?.question && (
+            <section className="chunk bg-white p-5">
+              <h2 className="flex items-center gap-2.5 text-lg font-black text-ink">
+                <span className="flex size-8 items-center justify-center rounded-full bg-sky/20 text-sky">
+                  <IconPeople className="size-4" />
+                </span>
+                {th.proxyAnswerTitle}
+              </h2>
+              <p className="mt-2 text-sm font-bold leading-relaxed text-ink/50">
+                {th.proxyAnswerHint}
+              </p>
+              <div className="mt-4 grid gap-3">
+                <label className="grid gap-1.5">
+                  <span className="text-xs font-black uppercase tracking-wide text-ink/50">
+                    {th.proxyNickname}
+                  </span>
+                  <input
+                    className="host-field"
+                    value={proxyNickname}
+                    onChange={(e) => setProxyNickname(e.target.value.slice(0, 20))}
+                    placeholder={th.nicknamePlaceholder}
+                  />
+                </label>
+                <label className="grid gap-1.5">
+                  <span className="text-xs font-black uppercase tracking-wide text-ink/50">
+                    {th.yourAnswer}
+                  </span>
+                  <textarea
+                    className="host-field min-h-20 resize-none"
+                    value={proxyText}
+                    onChange={(e) => setProxyText(e.target.value.slice(0, 600))}
+                    placeholder={th.answerPlaceholder}
+                  />
+                </label>
+                <button
+                  className="btn btn-sky w-full gap-2"
+                  onClick={submitForStudent}
+                  disabled={!proxyNickname.trim() || !proxyText.trim() || proxySending}
+                >
+                  <IconSend className="size-4" />
+                  {proxySending ? th.proxySending : th.proxySubmit}
+                </button>
+                {proxyNotice && (
+                  <p className="chunk-sm bg-paper-2 px-3 py-2 text-sm font-bold text-ink/70">
+                    {proxyNotice}
+                  </p>
+                )}
+              </div>
+            </section>
+          )}
+
           {phase === 'REVEAL' && reveal && (
-            <section className="rounded-3xl bg-[#fff4de] p-5 shadow-[0_10px_30px_rgba(17,19,24,0.05)]">
+            <section className="chunk bg-sun/25 p-5">
               <h2 className="text-base font-black text-ink">{th.teachingPoint}</h2>
               <p className="mt-2 font-bold leading-relaxed text-ink/80">
                 {reveal.teachingPoint || '—'}
               </p>
               {reveal.misconception && (
-                <p className="mt-3 rounded-xl bg-pop px-3 py-2.5 text-sm font-black text-white">
+                <p className="chunk-sm mt-3 bg-pop px-3 py-2.5 text-sm font-black text-white">
                   {reveal.misconception}
                 </p>
               )}
@@ -487,7 +555,7 @@ export default function HostPage() {
 
         {/* right: per-student status */}
         <div className="flex flex-col gap-4">
-          <section className="rounded-3xl bg-white p-5 shadow-[0_10px_30px_rgba(17,19,24,0.06)]">
+          <section className="chunk bg-white p-5">
             <div className="flex items-center gap-2.5">
               <span className="flex size-9 items-center justify-center rounded-full bg-sun/30 text-ink/70">
                 <IconChat className="size-[18px]" />
@@ -510,27 +578,21 @@ export default function HostPage() {
             ) : (
               <ul className="mt-4 grid gap-2.5">
                 {rows.map((row) => (
-                  <li key={row.answerId} className="grid gap-1.5 rounded-2xl bg-[#f7f8fa] p-3.5">
+                  <li key={row.answerId} className="chunk-sm grid gap-1.5 bg-[#f7f8fa] p-3.5">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-black text-ink">{row.nickname}</span>
                       <div className="flex items-center gap-1.5">
                         {row.verdict && (
-                          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-ink/70 shadow-sm">
-                            {VERDICT_LABEL[row.verdict]}
-                          </span>
+                          <span className="tag bg-white">{VERDICT_LABEL[row.verdict]}</span>
                         )}
-                        <span className="rounded-full bg-paper-2 px-2.5 py-1 text-xs font-black text-ink/70">
-                          {stageLabel(row)}
-                        </span>
+                        <span className="tag bg-paper-2">{stageLabel(row)}</span>
                       </div>
                     </div>
                     <p className="line-clamp-2 text-sm font-bold text-ink/60">{row.rawText}</p>
                     <div className="flex flex-wrap gap-1.5">
                       <button
-                        className={`rounded-full px-3 py-1.5 text-sm font-black transition ${
-                          row.promoted
-                            ? 'bg-sun text-ink'
-                            : 'bg-white text-ink/60 shadow-sm hover:bg-ink/5'
+                        className={`tag transition ${
+                          row.promoted ? 'bg-sun' : 'bg-white hover:bg-paper-2'
                         } ${orderLocked ? 'cursor-not-allowed opacity-50' : ''}`}
                         disabled={orderLocked}
                         title={orderLocked ? th.orderLocked : undefined}
@@ -546,7 +608,7 @@ export default function HostPage() {
                       </button>
                       {row.stage === 'failed' && (
                         <button
-                          className="rounded-full bg-sky px-3 py-1.5 text-sm font-black text-white transition hover:brightness-105"
+                          className="tag bg-sky text-white transition hover:brightness-105"
                           onClick={() =>
                             socket.emit('teacher:reanalyze', { answerId: row.answerId }, (res) =>
                               setNotice(res.ok ? null : (res.error ?? null)),
@@ -564,7 +626,7 @@ export default function HostPage() {
           </section>
 
           {rows.length === 0 && (
-            <section className="rounded-3xl bg-[#fff8ea] p-5 shadow-[0_10px_30px_rgba(17,19,24,0.04)]">
+            <section className="chunk bg-sun/20 p-5">
               <div className="flex items-start gap-3">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sun/40 text-ink/70">
                   <IconBulb className="size-[18px]" />
@@ -580,7 +642,7 @@ export default function HostPage() {
           )}
 
           {scores.length > 0 && (
-            <section className="rounded-3xl bg-white p-5 shadow-[0_10px_30px_rgba(17,19,24,0.06)]">
+            <section className="chunk bg-white p-5">
               <h2 className="text-lg font-black text-ink">{th.phaseScoreboard}</h2>
               <ol className="mt-3 grid gap-1.5">
                 {scores.slice(0, 10).map((r) => (

@@ -30,6 +30,7 @@ model Question {
   subject       String @default("science")
   language      String @default("th")
   distractors   Json // string[] — AI-generated wrong concepts for guessing
+  memeStyle     String @default("default") // "default" | "cartoon" — visual style for the AI-video upgrade only
 
   createdAt DateTime @default(now())
 
@@ -61,6 +62,7 @@ model Answer {
   analysis   Json? // SceneSpec
   verdict    String? // correct | partial | misconception | off_topic
   memeUrl    String? // /memes/<id>.gif
+  aiVideoUrl String? // /memes/<id>-ai.mp4 — real AI-generated upgrade of the CLASS_GUESS opener, if any
   promoted   Boolean  @default(false)
   createdAt  DateTime @default(now())
 

@@ -1,12 +1,10 @@
 /**
  * Thin client for OpenAI's Sora video-generation API. Same shape as
- * `src/server/kling.ts` and used the same way: only called offline by
- * `scripts/generate-backgrounds.ts`, never from the request path.
- *
- * Produces a short looping background clip per SETTING. The live renderer
- * (`src/lib/meme/renderer.ts`) pre-decodes it into a handful of frames once,
- * at scene setup, and cycles through them — no video decoding happens inside
- * the per-frame render loop.
+ * `src/server/kling.ts`. Two callers:
+ *  - `scripts/generate-backgrounds.ts`, offline, never touches the request path.
+ *  - `src/server/meme-upgrade.ts`, which upgrades exactly one meme per question
+ *    (the opening CLASS_GUESS card) to a real AI video — see that file for why
+ *    it's scoped that tightly.
  */
 
 const BASE = 'https://api.openai.com/v1/videos';
@@ -22,6 +20,10 @@ function apiKey(): string {
 
 function headers(): Record<string, string> {
   return { Authorization: `Bearer ${apiKey()}` };
+}
+
+export function soraAvailable(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY);
 }
 
 type CreateResponse = {

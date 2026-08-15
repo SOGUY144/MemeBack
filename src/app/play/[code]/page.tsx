@@ -85,11 +85,17 @@ export default function PlayPage() {
     };
     const onReveal = (r: RevealPayload) => setReveal(r);
     const onScores = (p: { rows: ScoreRow[] }) => setScores(p.rows);
+    // The opening CLASS_GUESS meme sometimes gets upgraded to a real AI video
+    // after the room is already looking at its sprite version — swap it in
+    // place, nothing else about the card changes.
+    const onUpgraded = (p: { answerId: string; videoUrl: string }) =>
+      setCard((c) => (c && c.answerId === p.answerId ? { ...c, memeUrl: p.videoUrl } : c));
 
     socket.on('meme:mine', onMine);
     socket.on('answer:mine', onOwnAnswer);
     socket.on('meme:progress', onProgress);
     socket.on('guess:card', onCard);
+    socket.on('meme:upgraded', onUpgraded);
     socket.on('reveal:answer', onReveal);
     socket.on('scoreboard', onScores);
     return () => {
@@ -97,6 +103,7 @@ export default function PlayPage() {
       socket.off('answer:mine', onOwnAnswer);
       socket.off('meme:progress', onProgress);
       socket.off('guess:card', onCard);
+      socket.off('meme:upgraded', onUpgraded);
       socket.off('reveal:answer', onReveal);
       socket.off('scoreboard', onScores);
     };
@@ -469,7 +476,7 @@ function TopBar({
   score?: number;
 }) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="chunk-sm flex items-center justify-between bg-white px-4 py-2.5">
       <span className="tag bg-sun">{code}</span>
       <span className="text-sm font-black">
         {nickname}

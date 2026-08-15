@@ -121,6 +121,13 @@ export type ClientToServer = {
     p: { questionId: string; text: string },
     ack?: (r: { ok: true; answerId: string } | { ok: false; error: string }) => void,
   ) => void;
+  /** Teacher types in an answer for a student with no device of their own. */
+  'teacher:submit-answer': (
+    p: { questionId: string; nickname: string; text: string },
+    ack?: (
+      r: { ok: true; answerId: string; nickname: string } | { ok: false; error: string },
+    ) => void,
+  ) => void;
   'guess:submit': (
     p: { answerId: string; choice: string },
     ack?: (r: { ok: true; correct: boolean; points: number } | { ok: false; error: string }) => void,
@@ -135,7 +142,14 @@ export type ClientToServer = {
     ack?: (r: { ok: boolean; error?: string }) => void,
   ) => void;
   'teacher:question': (
-    p: { prompt: string; targetConcept: string; conceptHint?: string; subject?: string },
+    p: {
+      prompt: string;
+      targetConcept: string;
+      conceptHint?: string;
+      subject?: string;
+      /** "default" | "cartoon" — visual style for the AI-video CLASS_GUESS opener only. */
+      memeStyle?: string;
+    },
     ack?: (r: { ok: true; questionId: string } | { ok: false; error: string }) => void,
   ) => void;
   'teacher:guess-next': (p: { index?: number }) => void;
@@ -156,6 +170,8 @@ export type ServerToClient = {
   'answer:mine': (p: { answerId: string; rawText: string }) => void;
   'generation:status': (p: { rows: GenerationStatus[] }) => void;
   'guess:card': (p: GuessCard | null) => void;
+  /** The opening CLASS_GUESS meme got a real AI-video upgrade; swap it in place. */
+  'meme:upgraded': (p: { answerId: string; videoUrl: string }) => void;
   'guess:tally': (p: { answerId: string; counts: Record<string, number>; voted: number }) => void;
   'reveal:answer': (p: RevealPayload) => void;
   scoreboard: (p: { rows: ScoreRow[] }) => void;

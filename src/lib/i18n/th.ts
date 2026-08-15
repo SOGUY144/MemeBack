@@ -4,6 +4,8 @@ export const th = {
 
   // join / landing
   joinTitle: 'เข้าห้องเรียน',
+  joinTabStudent: 'นักเรียน',
+  joinTabTeacher: 'ครู',
   roomCode: 'รหัสห้อง',
   roomCodePlaceholder: 'เช่น MEME01',
   nickname: 'ชื่อเล่น',
@@ -11,7 +13,9 @@ export const th = {
   join: 'เข้าร่วม',
   joining: 'กำลังเข้าห้อง…',
   createRoom: 'สร้างห้อง (สำหรับครู)',
+  createRoomShort: 'สร้างห้องใหม่',
   creatingRoom: 'กำลังสร้างห้อง…',
+  createRoomHint: 'ครูกดปุ่มนี้เพื่อเปิดห้อง แล้วเอารหัสไปให้นักเรียนพิมพ์เข้าร่วม',
   openProjector: 'เปิดจอฉาย',
 
   // phases
@@ -60,6 +64,10 @@ export const th = {
   targetConcept: 'หลักการเป้าหมาย',
   conceptHint: 'คำอธิบายของครู (ไม่บังคับ)',
   subject: 'วิชา',
+  memeStyle: 'สไตล์มีม (สำหรับมีมเปิดรอบทาย)',
+  memeStyleDefault: 'ธรรมดา',
+  memeStyleCartoon: 'การ์ตูนสดใส',
+  memeStyleBrainrot: 'มีมฮิต (Brainrot)',
   postQuestion: 'ส่งคำถาม',
   startAnswering: 'เริ่มให้ตอบ',
   closeAnswers: 'ปิดรับคำตอบ',
@@ -79,6 +87,12 @@ export const th = {
   spaceToAdvance: 'กด Space เพื่อไปขั้นถัดไป',
   noTeacherKey: 'ไม่พบกุญแจครูในเครื่องนี้ ให้สร้างห้องใหม่จากหน้าแรก',
   exitGame: 'ออกจากเกม',
+  proxyAnswerTitle: 'ตอบแทนนักเรียนที่ไม่มีมือถือ',
+  proxyAnswerHint: 'นักเรียนเดินมากระซิบคำตอบ ครูพิมพ์แทนได้ตรงนี้ — คะแนนขึ้นชื่อนักเรียนคนนั้นเหมือนตอบเอง',
+  proxyNickname: 'ชื่อนักเรียน',
+  proxySubmit: 'ส่งคำตอบแทน',
+  proxySending: 'กำลังส่ง…',
+  proxySent: (name: string) => `ส่งคำตอบของ ${name} แล้ว`,
   teacherTipTitle: 'เคล็ดลับ',
   teacherTipBody:
     'ตั้งคำถามที่กระตุ้นให้ผู้เล่นคิดวิเคราะห์ จะช่วยให้การเรียนรู้สนุกและมีประสิทธิภาพมากขึ้น',

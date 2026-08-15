@@ -22,7 +22,7 @@ export function suggestPromotions(candidates: PromotionCandidate[]): string[] {
   const seen = new Set<string>();
   const unique: PromotionCandidate[] = [];
   for (const c of usable) {
-    const sig = clipSignature(c.spec!);
+    const sig = clipSignature(c);
     if (seen.has(sig)) continue;
     seen.add(sig);
     unique.push(c);
@@ -58,8 +58,29 @@ export function suggestPromotions(candidates: PromotionCandidate[]): string[] {
   return picked.slice(0, 5);
 }
 
-function clipSignature(spec: SceneSpec): string {
+/**
+ * Every answer that fails analysis (no ANTHROPIC_API_KEY, two timeouts, a bad
+ * parse — see `fallbackScene()` in scene-schema.ts) renders the exact same
+ * single-actor think_bubble storyboard. Signing those by clip sequence like
+ * any other scene collapsed all of them into one "duplicate", so a room with
+ * no AI key ever got more than one meme on the projector no matter how many
+ * students answered. Each of those is still a distinct student's answer, so
+ * fold the answerId into the signature instead of letting them collide.
+ */
+function clipSignature(c: PromotionCandidate): string {
+  const spec = c.spec!;
+  if (isFallbackShape(spec)) return `fallback:${c.answerId}`;
   return spec.scene.beats.map((b) => b.clip).join('>');
+}
+
+function isFallbackShape(spec: SceneSpec): boolean {
+  const { scene } = spec;
+  return (
+    scene.setting === 'void' &&
+    scene.actors.length === 1 &&
+    scene.beats.length === 1 &&
+    scene.beats[0]?.clip === 'think_bubble'
+  );
 }
 
 /** More distinct clips and more actors = more to look at on the projector. */
