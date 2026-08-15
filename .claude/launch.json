@@ -6,7 +6,7 @@
       "runtimeExecutable": "cmd",
       "runtimeArgs": [
         "/c",
-        "cd /d C:\\Users\\Zareef\\Documents\\GitHub\\memeback && npm run dev"
+        "cd /d C:\\Users\\Ninja_god\\AppData\\Local\\GitHubDesktop\\app-3.6.3\\MemeBack && npm run dev"
       ],
       "port": 3000
     }

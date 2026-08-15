@@ -13,6 +13,10 @@ prisma/dev.db*
 public/memes/
 public/gif.worker.js
 
+# Kling-generated backgrounds (npm run gen:backgrounds) — paid, regenerable,
+# not required for the app to run.
+public/backgrounds/
+
 .env
 .env.local
 .env.*.local

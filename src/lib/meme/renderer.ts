@@ -1,6 +1,6 @@
 'use client';
 
-import { Application, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
+import { Application, Assets, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
 import { RIGS, partDataUrl, type HumanoidRig, type ObjectRig } from '@/assets/sprites';
 import { sampleTrack, CLIPS_LIB, type TrackPart } from '@/lib/meme/clips';
 import { segmentAt, type Segment, type Timeline } from '@/lib/meme/compile';
@@ -159,7 +159,128 @@ function gradient(g: Graphics, from: number, to: number, y0: number, y1: number,
   }
 }
 
-function drawBackground(setting: SettingName): Container {
+/**
+ * Optional pre-generated background (see `scripts/generate-backgrounds.ts`,
+ * `src/server/kling.ts` and `src/server/sora.ts`). Entirely offline and
+ * opt-in: nothing in this module ever calls out to an AI API at render time.
+ * If neither `public/backgrounds/<setting>.mp4` nor `.jpg` has been
+ * generated, every request 404s once, is cached, and rendering silently
+ * falls back to the built-in vector background below — the app behaves
+ * exactly as before for anyone who never runs the generation script.
+ */
+const bgTextureCache = new Map<string, Promise<Texture | null>>();
+
+function loadBackgroundPhoto(setting: SettingName): Promise<Texture | null> {
+  let cached = bgTextureCache.get(setting);
+  if (!cached) {
+    cached = Assets.load(`/backgrounds/${setting}.jpg`).catch(() => null);
+    bgTextureCache.set(setting, cached);
+  }
+  return cached;
+}
+
+/**
+ * A pre-generated background clip, split into a fixed number of frames and
+ * cached as textures. `loopMs` is the source clip's own duration — the
+ * renderer cycles through the frames on that period regardless of how long
+ * the meme itself runs, so a 3s ambient loop plays several times over a 6s
+ * meme without ever decoding video during the render loop itself.
+ */
+type VideoLoop = { textures: Texture[]; loopMs: number };
+const BG_VIDEO_FRAMES = 24;
+const bgVideoCache = new Map<string, Promise<VideoLoop | null>>();
+
+function seekTo(video: HTMLVideoElement, t: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      video.removeEventListener('seeked', onSeeked);
+      video.removeEventListener('error', onError);
+    };
+    const onSeeked = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error('video seek failed'));
+    };
+    video.addEventListener('seeked', onSeeked);
+    video.addEventListener('error', onError);
+    video.currentTime = t;
+  });
+}
+
+async function decodeVideoLoop(url: string): Promise<VideoLoop | null> {
+  const video = document.createElement('video');
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = 'auto';
+  video.src = url;
+
+  await new Promise<void>((resolve, reject) => {
+    video.onloadedmetadata = () => resolve();
+    video.onerror = () => reject(new Error('video failed to load'));
+  });
+  if (!Number.isFinite(video.duration) || video.duration <= 0) {
+    throw new Error('video has no usable duration');
+  }
+
+  const textures: Texture[] = [];
+  for (let i = 0; i < BG_VIDEO_FRAMES; i++) {
+    await seekTo(video, (i / BG_VIDEO_FRAMES) * video.duration);
+    const frame = document.createElement('canvas');
+    frame.width = MEME_W;
+    frame.height = MEME_H;
+    frame.getContext('2d')!.drawImage(video, 0, 0, MEME_W, MEME_H);
+    textures.push(Texture.from(frame));
+  }
+  return { textures, loopMs: video.duration * 1000 };
+}
+
+function loadBackgroundVideo(setting: SettingName): Promise<VideoLoop | null> {
+  let cached = bgVideoCache.get(setting);
+  if (!cached) {
+    cached = decodeVideoLoop(`/backgrounds/${setting}.mp4`).catch(() => null);
+    bgVideoCache.set(setting, cached);
+  }
+  return cached;
+}
+
+type BackgroundLayer = {
+  container: Container;
+  /** Advances the background to time `tMs`; null for static backgrounds. */
+  update: ((tMs: number) => void) | null;
+};
+
+async function drawBackground(setting: SettingName): Promise<BackgroundLayer> {
+  const loop = await loadBackgroundVideo(setting);
+  if (loop) {
+    const sprite = new Sprite(loop.textures[0]);
+    sprite.width = MEME_W;
+    sprite.height = MEME_H;
+    const c = new Container();
+    c.addChild(sprite);
+    const update = (tMs: number) => {
+      const idx = Math.floor(((tMs % loop.loopMs) / loop.loopMs) * loop.textures.length) % loop.textures.length;
+      sprite.texture = loop.textures[idx]!;
+    };
+    return { container: c, update };
+  }
+
+  const photo = await loadBackgroundPhoto(setting);
+  if (photo) {
+    const c = new Container();
+    const sprite = new Sprite(photo);
+    sprite.width = MEME_W;
+    sprite.height = MEME_H;
+    c.addChild(sprite);
+    return { container: c, update: null };
+  }
+
+  return { container: drawVectorBackground(setting), update: null };
+}
+
+function drawVectorBackground(setting: SettingName): Container {
   const c = new Container();
   const g = new Graphics();
   c.addChild(g);
@@ -287,6 +408,7 @@ export class SceneRenderer {
   private raf = 0;
   private scratch: HTMLCanvasElement;
   private destroyed = false;
+  private bgUpdate: ((tMs: number) => void) | null = null;
 
   private constructor(app: Application, timeline: Timeline, opts: RendererOptions) {
     this.app = app;
@@ -322,7 +444,9 @@ export class SceneRenderer {
     app.ticker.stop();
 
     const r = new SceneRenderer(app, opts.timeline, opts);
-    app.stage.addChild(drawBackground(opts.timeline.setting));
+    const bg = await drawBackground(opts.timeline.setting);
+    app.stage.addChild(bg.container);
+    r.bgUpdate = bg.update;
     app.stage.addChild(r.world);
     app.stage.addChild(r.fx);
 
@@ -352,6 +476,7 @@ export class SceneRenderer {
 
   /** Pose everything for absolute time `tMs` and draw the raw scene. */
   private poseAndDrawScene(tMs: number): void {
+    this.bgUpdate?.(tMs);
     this.fx.clear();
 
     let shake = 0;
