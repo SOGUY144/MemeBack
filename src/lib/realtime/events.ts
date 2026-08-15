@@ -1,5 +1,14 @@
 import type { Verdict } from '@/lib/meme/vocab';
-import type { Scene } from '@/lib/ai/scene-schema';
+import type { DialogueLine, Scene } from '@/lib/ai/scene-schema';
+
+/**
+ * SOLO rooms have no individual students — one shared answer per question,
+ * typed in by the teacher after a show of hands. Every SOLO submission
+ * resolves to this one fixed nickname (see resolveNamedPlayer in
+ * server/socket.ts), so the whole class reuses the same Player row/score
+ * across a room's questions instead of minting a new one each round.
+ */
+export const SOLO_CLASS_NICKNAME = 'ทั้งห้อง';
 
 export const PHASES = [
   'LOBBY',
@@ -38,9 +47,14 @@ export type QuestionView = {
   choicesReady: boolean;
 };
 
+export type RoomMode = 'PHONE' | 'SOLO';
+
 export type RoomState = {
   code: string;
   phase: Phase;
+  /** PHONE: students join with their own device. SOLO: no join code at all —
+   *  the teacher enters every answer and picks the class's guess from one screen. */
+  mode: RoomMode;
   players: PlayerView[];
   question: QuestionView | null;
   answeredCount: number;
@@ -50,7 +64,7 @@ export type RoomState = {
   playerCount: number;
 };
 
-export type MemeStage = 'analyzing' | 'composing' | 'encoding';
+export type MemeStage = 'analyzing' | 'composing' | 'encoding' | 'ai_rendering';
 
 export type MemeReady = {
   answerId: string;
@@ -103,6 +117,14 @@ export type GenerationStatus = {
   promoted: boolean;
   hasFile: boolean;
   rawText: string;
+  memeUrl: string | null;
+  /** Only ever non-empty for an AI-generated meme (memeUrl ending in
+   *  "-ai.png") — that's the only kind with a base cartoon to re-composite. */
+  dialogue: DialogueLine[];
+  /** Display name of the MEME_CATALOG entry the analysis matched, if any —
+   *  shown to the host before they spend money generating an AI image of it,
+   *  so a wrong match can be rejected instead of silently rendered. */
+  matchedMemeName: string | null;
 };
 
 export type ClientToServer = {
@@ -153,16 +175,38 @@ export type ClientToServer = {
     ack?: (r: { ok: true; questionId: string } | { ok: false; error: string }) => void,
   ) => void;
   'teacher:guess-next': (p: { index?: number }) => void;
+  /** SOLO-mode class guess: no player device submits `guess:submit`, so the
+   *  teacher records the class's show-of-hands pick from the host screen instead. */
+  'teacher:guess-pick': (
+    p: { answerId: string; choice: string },
+    ack?: (r: { ok: boolean; error?: string }) => void,
+  ) => void;
   /** Re-runs the AI on one answer whose analysis crashed. */
   'teacher:reanalyze': (
     p: { answerId: string },
     ack?: (r: { ok: boolean; error?: string }) => void,
   ) => void;
+  /** Re-draws an AI-generated meme's dialogue text — free, no new OpenAI call. */
+  'teacher:edit-dialogue': (
+    p: { answerId: string; dialogue: DialogueLine[] },
+    ack?: (r: { ok: true; memeUrl: string } | { ok: false; error: string }) => void,
+  ) => void;
+  /** On-demand upgrade from the Giphy match to a bespoke AI cartoon — costs
+   *  real money per call, so gated server-side to promoted answers only.
+   *  `ignoreMatch`: the host rejected the auto-detected catalog character (see
+   *  GenerationStatus.matchedMemeName) — generate the generic scene
+   *  description instead of that specific character. */
+  'teacher:generate-ai-meme': (
+    p: { answerId: string; ignoreMatch?: boolean },
+    ack?: (r: { ok: true; memeUrl: string } | { ok: false; error: string }) => void,
+  ) => void;
 };
 
 export type ServerToClient = {
   'room:state': (s: RoomState) => void;
-  'meme:progress': (p: { answerId: string; stage: MemeStage }) => void;
+  /** stage: null clears an in-progress indicator (e.g. a failed AI-meme
+   *  generation reverting to the meme the player already had). */
+  'meme:progress': (p: { answerId: string; stage: MemeStage | null }) => void;
   'meme:ready': (p: MemeReady) => void;
   'meme:mine': (p: MemeReady) => void;
   /** Personal channel only: hands a reconnecting student their own text back so

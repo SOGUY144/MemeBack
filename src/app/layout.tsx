@@ -1,5 +1,19 @@
 import type { Metadata, Viewport } from 'next';
+import { Kanit } from 'next/font/google';
 import './globals.css';
+
+/**
+ * Self-hosted at build time (next/font downloads once, then serves the files
+ * from this app's own origin) — the classroom-offline requirement stays true
+ * even though this is a "web font": no request to fonts.googleapis.com ever
+ * happens at runtime, only during `next build`/`next dev`.
+ */
+const kanit = Kanit({
+  subsets: ['thai', 'latin'],
+  weight: ['400', '600', '700', '900'],
+  variable: '--font-kanit',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'MemeBack — เปลี่ยนคำตอบให้เป็นมีม',
@@ -16,7 +30,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="th">
+    <html lang="th" className={kanit.variable}>
       <body>{children}</body>
     </html>
   );

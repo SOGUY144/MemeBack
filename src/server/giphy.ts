@@ -1,4 +1,5 @@
 import type { SceneSpec } from '@/lib/ai/scene-schema';
+import { MEME_CATALOG_BY_ID } from '@/lib/meme/catalog';
 
 /**
  * Replaces the meme-rendering step (sprite engine + the old Sora video
@@ -72,8 +73,17 @@ const STYLE_TAG: Record<MemeStyle, string> = {
  * toward literal (often sports or movie) matches for that verb and further
  * from meme content — one clear anchor plus the meme/reaction terms held the
  * results on-topic far more reliably than stacking three.
+ *
+ * When the analysis matched a specific entry from MEME_CATALOG, its own
+ * pre-tuned query (checked against the live Giphy API — see catalog.ts) is
+ * used verbatim instead: appending the generic style tag on top of an
+ * already-specific query only diluted results in testing, the same lesson
+ * that keeps the generic path down to one verb.
  */
 export function buildGiphyQuery(spec: SceneSpec, style: MemeStyle): string {
+  const matched = spec.matched_meme ? MEME_CATALOG_BY_ID.get(spec.matched_meme) : undefined;
+  if (matched) return matched.query;
+
   const primaryVerb = CLIP_TAG[spec.scene.beats[0]?.clip ?? ''] ?? '';
   return [primaryVerb, STYLE_TAG[style]].filter(Boolean).join(' ');
 }

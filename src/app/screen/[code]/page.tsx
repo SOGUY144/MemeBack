@@ -32,6 +32,7 @@ export default function ScreenPage() {
   const [now, setNow] = useState(() => Date.now());
 
   const phase = state?.phase ?? 'LOBBY';
+  const isSolo = state?.mode === 'SOLO';
 
   // The projector is the teacher's laptop, so its own origin is `localhost` and
   // a QR built from it sends every phone to its own loopback. Ask the server for
@@ -114,7 +115,23 @@ export default function ScreenPage() {
 
   return (
     <main className="screen-root flex min-h-dvh flex-col items-center justify-center gap-8 p-10">
-      {phase === 'LOBBY' && (
+      {phase === 'LOBBY' && isSolo && (
+        <div className="join-card w-full max-w-3xl text-center">
+          <p className="join-card-header">
+            <span className="join-card-dot" aria-hidden="true">
+              ·
+            </span>
+            {th.soloLobbyTitle}
+            <span className="join-card-dot" aria-hidden="true">
+              ·
+            </span>
+          </p>
+          <p className="join-card-code">{code}</p>
+          <p className="mt-4 text-2xl font-bold text-white/80">{th.soloLobbyBody}</p>
+        </div>
+      )}
+
+      {phase === 'LOBBY' && !isSolo && (
         <>
           <div className="join-card w-full max-w-4xl">
             <p className="join-card-header">
@@ -189,7 +206,11 @@ export default function ScreenPage() {
             {state?.question?.prompt ?? th.loading}
           </h1>
           <p className="text-5xl font-black text-sun">
-            {th.submittedCount(state?.answeredCount ?? 0, state?.playerCount ?? 0)}
+            {isSolo
+              ? (state?.answeredCount ?? 0) > 0
+                ? th.soloAnsweringDone
+                : th.soloAnsweringWaiting
+              : th.submittedCount(state?.answeredCount ?? 0, state?.playerCount ?? 0)}
           </p>
         </>
       )}
@@ -211,8 +232,10 @@ export default function ScreenPage() {
 
       {phase === 'PERSONAL_REVEAL' && (
         <>
-          <p className="text-8xl">📱</p>
-          <h1 className="text-center text-7xl">{th.lookAtYourDevice}</h1>
+          <p className="text-8xl">{isSolo ? '🎬' : '📱'}</p>
+          <h1 className="text-center text-7xl">
+            {isSolo ? th.soloPersonalReveal : th.lookAtYourDevice}
+          </h1>
         </>
       )}
 

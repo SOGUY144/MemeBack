@@ -15,6 +15,8 @@ function spec(opts: {
     concept_note: '',
     misconception: null,
     teaching_point: '',
+    matched_meme: null,
+    dialogue: [],
     scene: {
       setting: opts.setting ?? 'classroom',
       meme_format: 'impact_caption',

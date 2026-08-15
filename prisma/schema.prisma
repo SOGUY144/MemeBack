@@ -15,6 +15,7 @@ model Room {
   code       String   @unique // 6 chars, uppercase, no O/0/I/1
   teacherKey String // secret token kept in the teacher's localStorage
   phase      String   @default("LOBBY")
+  mode       String   @default("PHONE") // "PHONE" (students join with their own device) | "SOLO" (teacher enters every answer from one screen, no join code)
   createdAt  DateTime @default(now())
 
   questions Question[]

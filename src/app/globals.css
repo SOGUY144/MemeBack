@@ -2,8 +2,9 @@
 
 /*
   Loud and playful on purpose: thick ink borders, hard offset shadows, saturated
-  fills. No web fonts — the app has to boot on a school laptop with no network,
-  so the stack leans on Leelawadee UI / Noto Sans Thai, whichever is present.
+  fills. Kanit (--font-kanit, set on <html> in layout.tsx) is self-hosted at
+  build time, so it renders with zero network calls in the classroom — the
+  system stack below only kicks in if that font file is somehow missing.
 */
 
 @theme {
@@ -18,8 +19,8 @@
   --color-grape: #7f6fb0;
   --color-night: #16171f;
 
-  --font-display: 'Noto Sans Thai', 'Leelawadee UI', 'Segoe UI', system-ui, sans-serif;
-  --font-sans: 'Noto Sans Thai', 'Leelawadee UI', 'Segoe UI', system-ui, sans-serif;
+  --font-display: var(--font-kanit), 'Noto Sans Thai', 'Leelawadee UI', 'Segoe UI', system-ui, sans-serif;
+  --font-sans: var(--font-kanit), 'Noto Sans Thai', 'Leelawadee UI', 'Segoe UI', system-ui, sans-serif;
 }
 
 @layer base {

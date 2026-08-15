@@ -1,4 +1,5 @@
 import { DISTRACTORS, SceneSpec, fallbackScene } from '@/lib/ai/scene-schema';
+import { MEME_CATALOG_PROMPT_LIST } from '@/lib/meme/catalog';
 
 /**
  * The whole text-LLM surface of MemeBack: one call per answer to turn it into
@@ -70,15 +71,22 @@ RULES
 5. \`caption\` is the meme punchline in Thai. It must NOT name the target concept — the class has to guess it.
 6. \`concept_note\` explains to the student in Thai whether they got it and why.
 7. Beats are chronological. Total duration must be between 1500ms and 6000ms.
-8. Output raw JSON only. No markdown fences, no prose.
+8. \`matched_meme\` is the id of the ONE entry from MEME_CATALOG below whose vibe or action best fits this specific answer (e.g. an answer describing something hitting/crashing into something else while holding a bat fits tung_tung_sahur). Only pick one if it is a genuinely close fit — set it to null rather than forcing a weak match. This drives which GIF the student sees, so precision matters more than always filling it in.
+9. \`dialogue\` is 1-3 short lines turning the student's own answer into a punchy meme exchange, Thai, in the voice of the scene's actors/objects — e.g. a student writing "ต่อยกำแพงเต็มแรง" becomes [{"speaker":"ผม","line":"ต่อยกำแพงเต็มแรง!"},{"speaker":"กำแพง","line":"กฎข้อที่ 3 ของนิวตันไงน้อง"},{"speaker":"มือผม","line":"โอ๊ย"}]. Keep every line short (it has to fit on the image) and keep the joke — never spell out the target concept by name here either, same rule as \`caption\`. No emoji (drawn as boxes, not real emoji, when rendered).
+10. Never write a real person's name anywhere in the output (\`caption\`, \`dialogue\`, or an actor's \`label\`) even if the student's own answer names themselves or a classmate — use a generic stand-in instead ("ผม", "เพื่อน", "เด็กคนนั้น", "กำแพง", ...). Every one of these fields can end up displayed to the whole class or sent to an external image API, and a student's name has no place in either.
+11. Output raw JSON only. No markdown fences, no prose.
 
 ALLOWED CLIPS: idle, walk, run, jump, kick, punch, push, pull, collide,
 knockback, fall, bounce, shake, spin, throw, catch, float, sink, pop,
 point, think_bubble, sweat, celebrate
 
+MEME_CATALOG (id: name — when it fits)
+${MEME_CATALOG_PROMPT_LIST}
+
 SHAPE
 {"understood":bool,"verdict":"correct|partial|misconception|off_topic","concept_note":str<=160,
-"misconception":str|null,"teaching_point":str<=200,
+"misconception":str|null,"teaching_point":str<=200,"matched_meme":"<id from MEME_CATALOG>"|null,
+"dialogue":[{"speaker":str<=20,"line":str<=60}],
 "scene":{"setting":"classroom|street|water|space|kitchen|field|void",
 "meme_format":"impact_caption|two_panel|reaction_zoom|before_after",
 "actors":[{"id":"A","label":str<=24,"sprite":"person_a|person_b|cat|ball|boat|box|car|rocket","x":0..1}],

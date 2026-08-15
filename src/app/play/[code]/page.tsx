@@ -27,6 +27,7 @@ const STAGE_LABEL: Record<Stage, string> = {
   analyzing: th.stageAnalyzing,
   composing: th.stageComposing,
   encoding: th.stageEncoding,
+  ai_rendering: th.stageAiRendering,
 };
 
 export default function PlayPage() {
@@ -72,7 +73,7 @@ export default function PlayPage() {
       setMine(p);
       setStage(p.verdict === 'off_topic' ? null : 'composing');
     };
-    const onProgress = (p: { answerId: string; stage: Stage }) => setStage(p.stage);
+    const onProgress = (p: { answerId: string; stage: Stage | null }) => setStage(p.stage);
     const onOwnAnswer = (p: { answerId: string; rawText: string }) => {
       setAnswer(p.rawText);
       setSentAnswerId(p.answerId);
@@ -312,6 +313,12 @@ export default function PlayPage() {
               <Card className="p-3">
                 <MemeMedia memeUrl={mine.memeUrl} scene={mine.scene} />
               </Card>
+              {stage === 'ai_rendering' && (
+                <Card className="bg-grape/10 text-center">
+                  <p className="text-lg font-black">{th.aiMemeWaitTitle}</p>
+                  <p className="mt-1 font-bold text-ink/60">{th.aiMemeWaitBody}</p>
+                </Card>
+              )}
               <Card>
                 <span className={`tag ${VERDICT_CLASS[mine.verdict]}`}>
                   {VERDICT_LABEL[mine.verdict]}

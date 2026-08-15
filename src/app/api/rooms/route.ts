@@ -5,14 +5,17 @@ import { newRoomCode, newTeacherKey } from '@/server/socket';
 export const dynamic = 'force-dynamic';
 
 /** Creates a room. The teacherKey is returned once and lives in localStorage. */
-export async function POST() {
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => ({}));
+  const mode = body?.mode === 'SOLO' ? 'SOLO' : 'PHONE';
+
   for (let attempt = 0; attempt < 8; attempt++) {
     const code = newRoomCode();
     const taken = await prisma.room.findUnique({ where: { code } });
     if (taken) continue;
 
     const room = await prisma.room.create({
-      data: { code, teacherKey: newTeacherKey() },
+      data: { code, teacherKey: newTeacherKey(), mode },
     });
     return NextResponse.json({ code: room.code, teacherKey: room.teacherKey });
   }

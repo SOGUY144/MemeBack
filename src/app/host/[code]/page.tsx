@@ -5,8 +5,16 @@ import type { ReactNode, SVGProps } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { rememberTeacherKey, useRoom } from '@/lib/realtime/client';
 import { th } from '@/lib/i18n/th';
-import type { GenerationStatus, Phase, RevealPayload, ScoreRow } from '@/lib/realtime/events';
+import {
+  SOLO_CLASS_NICKNAME,
+  type GenerationStatus,
+  type GuessCard,
+  type Phase,
+  type RevealPayload,
+  type ScoreRow,
+} from '@/lib/realtime/events';
 import type { Verdict } from '@/lib/meme/vocab';
+import type { DialogueLine } from '@/lib/ai/scene-schema';
 
 const VERDICT_LABEL: Record<Verdict, string> = {
   correct: th.verdictCorrect,
@@ -252,15 +260,30 @@ export default function HostPage() {
   const [proxySending, setProxySending] = useState(false);
   const [proxyNotice, setProxyNotice] = useState<string | null>(null);
 
+  const [guessCard, setGuessCard] = useState<GuessCard | null>(null);
+  const [pickedChoice, setPickedChoice] = useState<string | null>(null);
+
+  const [editingRow, setEditingRow] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Per-answer opt-out of the auto-matched meme character — defaults to
+  // using the match (true here means "rejected", so an empty/default map
+  // entry naturally means "use it").
+  const [rejectedMatch, setRejectedMatch] = useState<Record<string, boolean>>({});
+
   const phase = state?.phase ?? 'LOBBY';
+  const isSolo = state?.mode === 'SOLO';
 
   useEffect(() => {
     const onStatus = (p: { rows: GenerationStatus[] }) => setRows(p.rows);
     const onReveal = (r: RevealPayload) => setReveal(r);
     const onScores = (p: { rows: ScoreRow[] }) => setScores(p.rows);
-    const onCard = (c: { index: number; total: number } | null) => {
+    const onCard = (c: GuessCard | null) => {
       setGuessIndex(c?.index ?? 0);
       setGuessTotal(c?.total ?? 0);
+      setGuessCard(c);
+      setPickedChoice(null);
       if (c) setReveal(null);
     };
 
@@ -308,22 +331,68 @@ export default function HostPage() {
 
   function submitForStudent() {
     const questionId = state?.question?.id;
-    if (!questionId || !proxyNickname.trim() || !proxyText.trim() || proxySending) return;
+    const nickname = isSolo ? SOLO_CLASS_NICKNAME : proxyNickname.trim();
+    if (!questionId || !nickname || !proxyText.trim() || proxySending) return;
     setProxySending(true);
     setProxyNotice(null);
     socket.emit(
       'teacher:submit-answer',
-      { questionId, nickname: proxyNickname.trim(), text: proxyText.trim() },
+      { questionId, nickname, text: proxyText.trim() },
       (res) => {
         setProxySending(false);
         if (res.ok) {
-          setProxyNotice(th.proxySent(res.nickname));
+          setProxyNotice(isSolo ? th.proxySentSolo : th.proxySent(res.nickname));
           setProxyText('');
         } else {
           setProxyNotice(res.error);
         }
       },
     );
+  }
+
+  function dialogueToText(dialogue: DialogueLine[]): string {
+    return dialogue.map((d) => `${d.speaker}: ${d.line}`).join('\n');
+  }
+
+  function textToDialogue(text: string): DialogueLine[] {
+    return text
+      .split('\n')
+      .map((line) => {
+        const i = line.indexOf(':');
+        if (i === -1) return null;
+        const speaker = line.slice(0, i).trim();
+        const rest = line.slice(i + 1).trim();
+        return speaker && rest ? { speaker, line: rest } : null;
+      })
+      .filter((d): d is DialogueLine => d !== null)
+      .slice(0, 4);
+  }
+
+  function startEditingDialogue(row: GenerationStatus) {
+    setEditingRow(row.answerId);
+    setEditText(dialogueToText(row.dialogue));
+  }
+
+  function saveDialogueEdit(answerId: string) {
+    if (editSaving) return;
+    setEditSaving(true);
+    socket.emit(
+      'teacher:edit-dialogue',
+      { answerId, dialogue: textToDialogue(editText) },
+      (res) => {
+        setEditSaving(false);
+        if (res.ok) setEditingRow(null);
+        else setNotice(res.error);
+      },
+    );
+  }
+
+  function pickGuess(choice: string) {
+    if (!guessCard || pickedChoice) return;
+    socket.emit('teacher:guess-pick', { answerId: guessCard.answerId, choice }, (res) => {
+      if (res.ok) setPickedChoice(choice);
+      else setNotice(res.error ?? null);
+    });
   }
 
   function postQuestion() {
@@ -484,44 +553,81 @@ export default function HostPage() {
             </div>
           </section>
 
+          {phase === 'CLASS_GUESS' && isSolo && guessCard && (
+            <section className="chunk bg-sky/10 p-5">
+              <h2 className="flex items-center gap-2.5 text-lg font-black text-ink">
+                <span className="flex size-8 items-center justify-center rounded-full bg-sky/20 text-sky">
+                  <IconPeople className="size-4" />
+                </span>
+                {th.guessPickTitle}
+              </h2>
+              <p className="mt-2 text-sm font-bold leading-relaxed text-ink/50">{th.guessPickHint}</p>
+              <div className="mt-4 grid gap-2.5">
+                {guessCard.choices.map((choice) => (
+                  <button
+                    key={choice}
+                    type="button"
+                    className={`btn w-full text-left ${
+                      pickedChoice === choice ? 'btn-mint' : 'bg-white'
+                    }`}
+                    onClick={() => pickGuess(choice)}
+                    disabled={pickedChoice !== null}
+                  >
+                    {choice}
+                  </button>
+                ))}
+              </div>
+              {pickedChoice && (
+                <p className="chunk-sm mt-3 bg-paper-2 px-3 py-2 text-sm font-bold text-ink/70">
+                  {th.guessPicked}
+                </p>
+              )}
+            </section>
+          )}
+
           {phase === 'ANSWERING' && state?.question && (
             <section className="chunk bg-white p-5">
               <h2 className="flex items-center gap-2.5 text-lg font-black text-ink">
                 <span className="flex size-8 items-center justify-center rounded-full bg-sky/20 text-sky">
                   <IconPeople className="size-4" />
                 </span>
-                {th.proxyAnswerTitle}
+                {isSolo ? th.proxyAnswerTitleSolo : th.proxyAnswerTitle}
               </h2>
               <p className="mt-2 text-sm font-bold leading-relaxed text-ink/50">
-                {th.proxyAnswerHint}
+                {isSolo ? th.proxyAnswerHintSolo : th.proxyAnswerHint}
               </p>
               <div className="mt-4 grid gap-3">
-                <label className="grid gap-1.5">
-                  <span className="text-xs font-black uppercase tracking-wide text-ink/50">
-                    {th.proxyNickname}
-                  </span>
-                  <input
-                    className="host-field"
-                    value={proxyNickname}
-                    onChange={(e) => setProxyNickname(e.target.value.slice(0, 20))}
-                    placeholder={th.nicknamePlaceholder}
-                  />
-                </label>
+                {!isSolo && (
+                  <label className="grid gap-1.5">
+                    <span className="text-xs font-black uppercase tracking-wide text-ink/50">
+                      {th.proxyNickname}
+                    </span>
+                    <input
+                      className="host-field"
+                      value={proxyNickname}
+                      onChange={(e) => setProxyNickname(e.target.value.slice(0, 20))}
+                      placeholder={th.nicknamePlaceholder}
+                    />
+                  </label>
+                )}
                 <label className="grid gap-1.5">
                   <span className="text-xs font-black uppercase tracking-wide text-ink/50">
                     {th.yourAnswer}
                   </span>
                   <textarea
-                    className="host-field min-h-20 resize-none"
+                    className={`host-field resize-none ${
+                      isSolo ? 'min-h-40 text-xl leading-relaxed' : 'min-h-20'
+                    }`}
                     value={proxyText}
                     onChange={(e) => setProxyText(e.target.value.slice(0, 600))}
                     placeholder={th.answerPlaceholder}
+                    autoFocus={isSolo}
                   />
                 </label>
                 <button
-                  className="btn btn-sky w-full gap-2"
+                  className={`btn btn-sky w-full gap-2 ${isSolo ? 'py-4 text-lg' : ''}`}
                   onClick={submitForStudent}
-                  disabled={!proxyNickname.trim() || !proxyText.trim() || proxySending}
+                  disabled={(!isSolo && !proxyNickname.trim()) || !proxyText.trim() || proxySending}
                 >
                   <IconSend className="size-4" />
                   {proxySending ? th.proxySending : th.proxySubmit}
@@ -589,6 +695,24 @@ export default function HostPage() {
                       </div>
                     </div>
                     <p className="line-clamp-2 text-sm font-bold text-ink/60">{row.rawText}</p>
+                    {row.matchedMemeName &&
+                      row.promoted &&
+                      row.stage === 'done' &&
+                      !row.memeUrl?.endsWith('-ai.png') && (
+                        <label className="flex items-center gap-1.5 text-xs font-bold text-ink/60">
+                          <input
+                            type="checkbox"
+                            checked={!rejectedMatch[row.answerId]}
+                            onChange={(e) =>
+                              setRejectedMatch((prev) => ({
+                                ...prev,
+                                [row.answerId]: !e.target.checked,
+                              }))
+                            }
+                          />
+                          {th.matchedMemeLabel(row.matchedMemeName)}
+                        </label>
+                      )}
                     <div className="flex flex-wrap gap-1.5">
                       <button
                         className={`tag transition ${
@@ -618,7 +742,58 @@ export default function HostPage() {
                           {th.retryAnalysis}
                         </button>
                       )}
+                      {row.promoted && row.stage === 'done' && !row.memeUrl?.endsWith('-ai.png') && (
+                        <button
+                          className="tag bg-grape text-white transition hover:brightness-105"
+                          onClick={() =>
+                            socket.emit(
+                              'teacher:generate-ai-meme',
+                              { answerId: row.answerId, ignoreMatch: rejectedMatch[row.answerId] ?? false },
+                              (res) => setNotice(res.ok ? null : (res.error ?? null)),
+                            )
+                          }
+                        >
+                          {th.generateAiMeme}
+                        </button>
+                      )}
+                      {row.stage === 'ai_rendering' && (
+                        <span className="tag bg-grape/20 text-ink/60">{th.generatingAiMeme}</span>
+                      )}
+                      {row.memeUrl?.endsWith('-ai.png') && editingRow !== row.answerId && (
+                        <button
+                          className="tag bg-white transition hover:bg-paper-2"
+                          onClick={() => startEditingDialogue(row)}
+                        >
+                          {th.editDialogue}
+                        </button>
+                      )}
                     </div>
+                    {editingRow === row.answerId && (
+                      <div className="mt-1 grid gap-2">
+                        <p className="text-xs font-bold text-ink/40">{th.editDialogueHint}</p>
+                        <textarea
+                          className="host-field min-h-24 resize-none text-sm"
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                        />
+                        <div className="flex gap-1.5">
+                          <button
+                            className="tag bg-mint text-white transition hover:brightness-105"
+                            onClick={() => saveDialogueEdit(row.answerId)}
+                            disabled={editSaving}
+                          >
+                            {editSaving ? th.proxySending : th.save}
+                          </button>
+                          <button
+                            className="tag bg-white transition hover:bg-paper-2"
+                            onClick={() => setEditingRow(null)}
+                            disabled={editSaving}
+                          >
+                            {th.cancel}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -670,9 +845,12 @@ function stageLabel(row: GenerationStatus): string {
       return th.stageComposing;
     case 'encoding':
       return th.stageEncoding;
+    case 'ai_rendering':
+      return th.stageAiRendering;
     case 'failed':
       return th.error;
     default:
-      return row.hasFile ? 'GIF ✓' : '✓';
+      if (!row.hasFile) return '✓';
+      return row.memeUrl?.endsWith('-ai.png') ? 'AI ✓' : 'GIF ✓';
   }
 }

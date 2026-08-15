@@ -1,55 +1,53 @@
-import { createServer } from 'node:http';
-import next from 'next';
-import { Server } from 'socket.io';
+/**
+ * Bootstrap only. Everything in this file must finish — env loaded, a
+ * database ready to use — before `./server-main` is ever imported.
+ *
+ * That import below is deliberately *dynamic* (`await import(...)`), not a
+ * static one: ES module imports are hoisted above every other statement in
+ * a file, including ones placed textually before them, so a static
+ * `import { startServer } from './server-main'` here would still run before
+ * any of the code below it — server-main.ts pulls in `@/server/socket` →
+ * `@/lib/db`, which constructs `new PrismaClient()` at module scope, and
+ * that construction needs to happen strictly after this file's own env
+ * setup, not race it.
+ *
+ * This isn't theoretical — it's the exact sequence of two real, reproduced
+ * bugs this file exists to prevent:
+ *   1. DATABASE_URL wasn't loaded before PrismaClient's first query, which
+ *      failed with "Environment variable not found: DATABASE_URL" and did
+ *      not self-heal even after the var later appeared (Prisma resolves the
+ *      datasource once, not per-query).
+ *   2. Loading env earlier (via a CLI flag) fixed #1 but changed *how*
+ *      DATABASE_URL entered process.env, which exposed a second, unrelated
+ *      bug: Prisma Client's runtime resolves a relative sqlite `file:` URL
+ *      against its own query-engine location
+ *      (node_modules/.prisma/client/), not against prisma/schema.prisma's
+ *      directory — so it silently connected to a fresh, empty database
+ *      instead of the real one. Every request 500'd with "table does not
+ *      exist" while the real database sat untouched.
+ * `bootstrapEnv` (src/server/env-bootstrap.ts) resolves DATABASE_URL to an
+ * absolute path and preflights it before either bug can happen again,
+ * regardless of which loader or ordering quirk is involved.
+ */
+import { bootstrapEnv, DatabaseNotReadyError } from '@/server/env-bootstrap';
 
-import { registerSocketHandlers, type IO } from '@/server/socket';
-
-const dev = process.env.NODE_ENV !== 'production';
-const hostname = process.env.HOST ?? '0.0.0.0';
-const port = Number(process.env.PORT ?? 3000);
+try {
+  // Same assumption Next itself makes (next({dev, hostname, port}) also
+  // defaults to cwd) — both npm scripts already invoke this from the
+  // project root (package.json's "dev"/"start" run "tsx ... server.ts").
+  bootstrapEnv(process.cwd());
+} catch (err) {
+  if (err instanceof DatabaseNotReadyError) {
+    console.error('[startup]', err.message);
+  } else {
+    console.error('[startup] failed to load environment:', err);
+  }
+  process.exit(1);
+}
 
 async function main() {
-  const app = next({ dev, hostname, port });
-  await app.prepare();
-  const handle = app.getRequestHandler();
-
-  const server = createServer((req, res) => {
-    handle(req, res).catch((err) => {
-      console.error('[next] request failed:', err);
-      res.statusCode = 500;
-      res.end('internal error');
-    });
-  });
-
-  // Registered *before* Socket.IO attaches: engine.io snapshots the existing
-  // upgrade listeners when it attaches and replays non-Socket.IO upgrades to
-  // them. Register this afterwards and dev HMR loses its websocket.
-  const upgradeHandler = app.getUpgradeHandler();
-  server.on('upgrade', (req, socket, head) => {
-    upgradeHandler(req, socket, head).catch((err: unknown) => {
-      console.error('[next] upgrade failed:', err);
-      socket.destroy();
-    });
-  });
-
-  const io: IO = new Server(server, {
-    // students upload their encoded meme over the socket; a 5s GIF at 480×270
-    // lands well under this, but the default 1MB would clip the busy ones.
-    maxHttpBufferSize: 8 * 1024 * 1024,
-    cors: { origin: true },
-  });
-
-  registerSocketHandlers(io);
-
-  server.listen(port, hostname, () => {
-    const shown = hostname === '0.0.0.0' ? 'localhost' : hostname;
-    console.log(`\n  MemeBack พร้อมแล้ว → http://${shown}:${port}`);
-    console.log(
-      process.env.OPENAI_API_KEY
-        ? '  AI: เปิดใช้งาน'
-        : '  AI: ปิดอยู่ (ไม่มี OPENAI_API_KEY) — ทุกคำตอบจะใช้ฉากสำรอง\n',
-    );
-  });
+  const { startServer } = await import('./server-main');
+  await startServer();
 }
 
 main().catch((err) => {

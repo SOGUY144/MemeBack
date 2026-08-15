@@ -13,6 +13,7 @@ export default function LandingPage() {
   const [busy, setBusy] = useState<'join' | 'create' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
+  const [roomMode, setRoomMode] = useState<'PHONE' | 'SOLO'>('PHONE');
 
   const joinable = code.trim().length >= 4 && nickname.trim().length >= 1;
 
@@ -54,7 +55,11 @@ export default function LandingPage() {
     setBusy('create');
     setError(null);
     try {
-      const res = await fetch('/api/rooms', { method: 'POST' });
+      const res = await fetch('/api/rooms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: roomMode }),
+      });
       const data = (await res.json()) as { code?: string; teacherKey?: string; error?: string };
       if (!res.ok || !data.code || !data.teacherKey) {
         setError(data.error ?? th.error);
@@ -158,6 +163,35 @@ export default function LandingPage() {
               <p className="text-center text-sm font-bold leading-relaxed text-ink/60">
                 {th.createRoomHint}
               </p>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-black uppercase tracking-wide text-ink/50">
+                  {th.roomModeLabel}
+                </span>
+                <div className="tab-switch" role="radiogroup" aria-label={th.roomModeLabel}>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={roomMode === 'PHONE'}
+                    data-active={roomMode === 'PHONE'}
+                    onClick={() => setRoomMode('PHONE')}
+                  >
+                    {th.roomModePhone}
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={roomMode === 'SOLO'}
+                    data-active={roomMode === 'SOLO'}
+                    onClick={() => setRoomMode('SOLO')}
+                  >
+                    {th.roomModeSolo}
+                  </button>
+                </div>
+                <p className="text-center text-xs font-bold text-ink/40">
+                  {roomMode === 'PHONE' ? th.roomModePhoneHint : th.roomModeSoloHint}
+                </p>
+              </div>
 
               {error && (
                 <p className="chunk-sm bg-berry/10 px-3 py-2.5 text-sm font-bold text-berry">

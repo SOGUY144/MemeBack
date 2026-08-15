@@ -8,6 +8,9 @@ import { SceneSpec } from '@/lib/ai/scene-schema';
 import { analyzeAnswer, generateDistractors } from '@/server/ai';
 import { suggestPromotions } from '@/server/promotion';
 import { buildGiphyQuery, isMemeStyle, searchMemeGif } from '@/server/giphy';
+import { generateMemeImage, recompositeDialogue } from '@/server/image-gen';
+import type { DialogueLine } from '@/lib/ai/scene-schema';
+import { MEME_CATALOG_BY_ID } from '@/lib/meme/catalog';
 import type { Verdict } from '@/lib/meme/vocab';
 import { AUTHOR_BONUS, authorEarnedBonus, guessPoints, verdictPoints } from '@/server/scoring';
 import {
@@ -31,6 +34,11 @@ type Sock = Socket<ClientToServer, ServerToClient> & {
 const MEME_DIR = path.join(process.cwd(), 'public', 'memes');
 const GUESS_DURATION_MS = 30_000;
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no O/0/I/1
+/** Soft budget per room per server lifetime — a floor under cost if a room
+ *  stays open far longer than a normal class period, independent of the
+ *  per-click idempotency lock (that stops duplicates, this stops volume).
+ *  Exported so tests assert against the real value instead of a copy of it. */
+export const AI_GENERATION_CAP = 30;
 
 // ---------------------------------------------------------------------------
 // per-room runtime state (rebuilt from the DB on demand, never the source of truth)
@@ -45,6 +53,20 @@ type Runtime = {
   /** Authors already paid the crowd bonus, so re-revealing a meme cannot pay twice. */
   bonusPaid: Set<string>;
   pendingAnalyses: number;
+  /**
+   * answerIds with a teacher:generate-ai-meme call in flight right now.
+   * Checked and set synchronously (no `await` in between) at the top of that
+   * handler, before the DB lookup — that's what makes it an actual lock
+   * against a double-click or two teacher tabs, not just a UI nicety. A
+   * client-side disabled button alone cannot close this: it only takes effect
+   * after the round-trip that tells the client to disable it, and a second
+   * click inside that window would otherwise reach the handler untouched.
+   */
+  generatingAi: Set<string>;
+  /** Session-lifetime count of paid AI-meme generations for this room, capped
+   *  by AI_GENERATION_CAP below — a floor under runaway cost from a room left
+   *  open a long time, independent of the per-answer lock above. */
+  aiGenerationsUsed: number;
 };
 
 const runtimes = new Map<string, Runtime>();
@@ -60,6 +82,8 @@ function runtime(code: string): Runtime {
       choices: new Map(),
       bonusPaid: new Set(),
       pendingAnalyses: 0,
+      generatingAi: new Set(),
+      aiGenerationsUsed: 0,
     };
     runtimes.set(code, r);
   }
@@ -166,6 +190,7 @@ async function buildRoomState(io: IO, code: string): Promise<RoomState | null> {
   return {
     code: room.code,
     phase: room.phase as Phase,
+    mode: room.mode === 'SOLO' ? 'SOLO' : 'PHONE',
     players,
     question: question
       ? {
@@ -208,6 +233,7 @@ async function pushGenerationStatus(io: IO, code: string) {
         })
       ).map((a) => {
         const live = rt.generation.get(a.id);
+        const spec = parseSpec(a.analysis);
         return {
           answerId: a.id,
           playerId: a.playerId,
@@ -217,6 +243,11 @@ async function pushGenerationStatus(io: IO, code: string) {
           promoted: a.promoted,
           hasFile: Boolean(a.memeUrl),
           rawText: a.rawText,
+          memeUrl: a.memeUrl,
+          dialogue: spec?.dialogue ?? [],
+          matchedMemeName: spec?.matched_meme
+            ? (MEME_CATALOG_BY_ID.get(spec.matched_meme)?.name ?? null)
+            : null,
         };
       })
     : [];
@@ -268,9 +299,11 @@ async function cleanupOldMemes(roomId: string, keepQuestionId: string) {
     if (!stale.length) return;
 
     await Promise.all(
-      stale.flatMap((a) =>
-        ['gif', 'mp4'].map((ext) => rm(path.join(MEME_DIR, `${a.id}.${ext}`), { force: true })),
-      ),
+      stale.flatMap((a) => [
+        ...['gif', 'mp4'].map((ext) => rm(path.join(MEME_DIR, `${a.id}.${ext}`), { force: true })),
+        rm(path.join(MEME_DIR, `${a.id}-ai.png`), { force: true }),
+        rm(path.join(MEME_DIR, `${a.id}-ai-base.png`), { force: true }),
+      ]),
     );
     // The row outlives the file, so drop the URL too rather than leave a 404
     // behind for anything that reads the answer later.
@@ -307,6 +340,9 @@ async function runAnalysis(io: IO, code: string, answerId: string) {
       promoted: false,
       hasFile: false,
       rawText: answer.rawText,
+      memeUrl: null,
+      dialogue: [],
+      matchedMemeName: null,
     };
     rt.generation.set(answerId, status);
     await pushGenerationStatus(io, code);
@@ -340,13 +376,19 @@ async function runAnalysis(io: IO, code: string, answerId: string) {
 
     status.stage = spec.verdict === 'off_topic' ? 'done' : 'composing';
     status.verdict = spec.verdict;
+    status.matchedMemeName = spec.matched_meme
+      ? (MEME_CATALOG_BY_ID.get(spec.matched_meme)?.name ?? null)
+      : null;
 
     // Prefer a real Giphy GIF that matches the scene's actions over the
     // sprite render. off_topic never gets a meme at all (offTopicRetry takes
     // over client-side), so there's nothing worth searching for there. If
-    // Giphy has no key, no match, or errors out, memeUrl stays null and the
-    // client's usual sprite-render-and-upload path runs exactly as before —
-    // this only ever adds a faster, free option in front of it.
+    // Giphy has no key or no match, memeUrl stays null and the client's usual
+    // sprite-render-and-upload path runs exactly as before — this only ever
+    // adds a faster, free option in front of it. The bespoke AI cartoon
+    // (image-gen.ts) is deliberately NOT triggered here — it costs real money
+    // per call, so it only ever runs on demand via teacher:generate-ai-meme,
+    // and only for an answer the teacher has already promoted.
     let memeUrl: string | null = null;
     if (spec.verdict !== 'off_topic') {
       const style = isMemeStyle(answer.question.memeStyle) ? answer.question.memeStyle : 'default';
@@ -355,6 +397,8 @@ async function runAnalysis(io: IO, code: string, answerId: string) {
         await prisma.answer.update({ where: { id: answerId }, data: { memeUrl } });
         status.hasFile = true;
         status.stage = 'done';
+        status.memeUrl = memeUrl;
+        status.dialogue = spec.dialogue;
       }
     }
 
@@ -711,6 +755,16 @@ export function registerSocketHandlers(io: IO) {
               misconception: spec.misconception,
               understood: spec.understood,
             });
+            // meme:mine above always resets the client's local stage to
+            // "composing" (see the play page's onMine handler) — if an
+            // AI-meme generation is genuinely still in flight for this
+            // answer, re-assert that afterward so a student who disconnects
+            // mid-generation and reconnects sees "กำลังสร้างมีมพิเศษ" again
+            // instead of silently missing it until the result lands.
+            const liveStage = runtime(code).generation.get(mine.id)?.stage;
+            if (liveStage && liveStage !== 'done' && liveStage !== 'failed') {
+              socket.emit('meme:progress', { answerId: mine.id, stage: liveStage });
+            }
           }
         }
       } catch (err) {
@@ -1012,6 +1066,39 @@ export function registerSocketHandlers(io: IO) {
       await pushRoomState(io, code);
     });
 
+    // SOLO mode only: no player device is connected to call `guess:submit`, so
+    // the teacher records the class's show-of-hands pick here instead. Purely
+    // a display broadcast — no Guess row is written (there is no real player
+    // to attribute it to), so REVEAL's tally/author-bonus math sees zero votes
+    // and simply skips the bonus, same as any answer nobody guessed on.
+    socket.on('teacher:guess-pick', async (p, ack) => {
+      const code = socket.data.roomCode;
+      if (!code || !socket.data.isTeacher) return ack?.({ ok: false, error: 'ไม่มีสิทธิ์' });
+      try {
+        const room = await prisma.room.findUnique({ where: { code } });
+        if (!room || room.phase !== 'CLASS_GUESS') {
+          return ack?.({ ok: false, error: 'ยังไม่ถึงเวลาทาย' });
+        }
+        const rt = runtime(code);
+        if (rt.guessOrder[rt.guessIndex] !== p.answerId) {
+          return ack?.({ ok: false, error: 'มีมนี้ไม่ได้อยู่บนจอแล้ว' });
+        }
+
+        const choice = String(p.choice ?? '').slice(0, 120);
+        if (!choice) return ack?.({ ok: false, error: 'เลือกคำตอบก่อนนะ' });
+
+        io.to(roomChannel(code)).emit('guess:tally', {
+          answerId: p.answerId,
+          counts: { [choice]: 1 },
+          voted: 1,
+        });
+        ack?.({ ok: true });
+      } catch (err) {
+        console.error('[socket] teacher:guess-pick failed:', err);
+        ack?.({ ok: false, error: 'บันทึกคำตอบไม่สำเร็จ' });
+      }
+    });
+
     socket.on('teacher:reanalyze', async (p, ack) => {
       const code = socket.data.roomCode;
       if (!code || !socket.data.isTeacher) return ack?.({ ok: false, error: 'ไม่มีสิทธิ์' });
@@ -1030,6 +1117,166 @@ export function registerSocketHandlers(io: IO) {
       } catch (err) {
         console.error('[socket] teacher:reanalyze failed:', err);
         ack?.({ ok: false, error: 'สั่งวิเคราะห์ใหม่ไม่สำเร็จ' });
+      }
+    });
+
+    // On-demand upgrade from whatever meme an answer already has (Giphy match
+    // or nothing) to a bespoke AI cartoon. Deliberately teacher-triggered and
+    // gated to promoted answers only — this is the one call in the whole app
+    // that costs real money per use, so it must never fire automatically for
+    // every answer in a class of 30, and must never fire twice for one click.
+    socket.on('teacher:generate-ai-meme', async (p, ack) => {
+      const code = socket.data.roomCode;
+      if (!code || !socket.data.isTeacher) return ack?.({ ok: false, error: 'ไม่มีสิทธิ์' });
+
+      const answerId = String(p?.answerId ?? '');
+      const rt = runtime(code);
+
+      // Synchronous check-and-set, zero `await`s above it — this is what
+      // actually closes the double-click/two-tab race. A disabled client
+      // button only takes effect after a round trip; this takes effect
+      // before the first `await` in this handler even runs.
+      if (rt.generatingAi.has(answerId)) {
+        return ack?.({ ok: false, error: 'กำลังสร้างมีมนี้อยู่แล้ว รอสักครู่นะ' });
+      }
+      if (rt.aiGenerationsUsed >= AI_GENERATION_CAP) {
+        return ack?.({
+          ok: false,
+          error: `ห้องนี้สร้างมีม AI ครบ ${AI_GENERATION_CAP} รูปแล้ว ใช้ GIF จาก Giphy แทนได้`,
+        });
+      }
+      rt.generatingAi.add(answerId);
+
+      try {
+        const answer = await prisma.answer.findUnique({
+          where: { id: answerId },
+          include: { question: { include: { room: true } } },
+        });
+        if (!answer || answer.question.room.code !== code) {
+          return ack?.({ ok: false, error: 'ไม่พบคำตอบนี้' });
+        }
+        if (!answer.promoted) {
+          return ack?.({ ok: false, error: 'ต้องกด "ขึ้นจอ" ก่อนถึงจะสร้างมีม AI ได้' });
+        }
+        const spec = parseSpec(answer.analysis);
+        if (!spec) return ack?.({ ok: false, error: 'ยังไม่มีการวิเคราะห์คำตอบนี้' });
+
+        // Host confirmed/rejected the auto-matched character (see
+        // teacher:generate-ai-meme's `ignoreMatch` in events.ts) — reject
+        // falls back to the generic, non-character-specific description.
+        const effectiveSpec = p.ignoreMatch ? { ...spec, matched_meme: null } : spec;
+
+        rt.aiGenerationsUsed++;
+        const status = rt.generation.get(answerId);
+        if (status) status.stage = 'ai_rendering';
+        // Always broadcast, whether or not a live in-memory entry exists for
+        // this answer (e.g. after a server restart) — pushGenerationStatus
+        // merges DB + live state itself, so this is never a silent no-op the
+        // way `if (status) { ...push... }` was: that skipped the broadcast
+        // entirely whenever `status` was missing, which could leave a client
+        // showing stale state with nothing to tell it otherwise.
+        await pushGenerationStatus(io, code);
+        io.to(playerChannel(answer.playerId)).emit('meme:progress', {
+          answerId: answer.id,
+          stage: 'ai_rendering',
+        });
+
+        const memeUrl = await generateMemeImage(effectiveSpec, answer.id);
+        if (!memeUrl) {
+          if (status) status.stage = 'done';
+          await pushGenerationStatus(io, code);
+          // Clears the "กำลังสร้างมีมพิเศษ" banner on the player's own screen —
+          // they keep whatever meme (Giphy match or none) they already had.
+          io.to(playerChannel(answer.playerId)).emit('meme:progress', {
+            answerId: answer.id,
+            stage: null,
+          });
+          // Internal failure reasons (API error text, rate limits, moderation
+          // rejections) are logged server-side only (image-gen.ts) — this ack
+          // never carries anything but a fixed, generic Thai string.
+          return ack?.({ ok: false, error: 'สร้างภาพไม่สำเร็จ ลองใหม่อีกครั้ง หรือใช้ GIF เดิมไปก่อนได้' });
+        }
+
+        await prisma.answer.update({ where: { id: answer.id }, data: { memeUrl } });
+        if (status) {
+          status.stage = 'done';
+          status.hasFile = true;
+          status.memeUrl = memeUrl;
+        }
+        await pushGenerationStatus(io, code);
+
+        ack?.({ ok: true, memeUrl });
+        io.to(playerChannel(answer.playerId)).emit('meme:mine', {
+          answerId: answer.id,
+          memeUrl,
+          scene: spec.scene,
+          verdict: spec.verdict,
+          conceptNote: spec.concept_note,
+          misconception: spec.misconception,
+          understood: spec.understood,
+        });
+      } catch (err) {
+        console.error('[socket] teacher:generate-ai-meme failed:', err);
+        ack?.({ ok: false, error: 'สร้างภาพไม่สำเร็จ' });
+      } finally {
+        rt.generatingAi.delete(answerId);
+      }
+    });
+
+    // Re-draws the dialogue burned onto an AI-generated meme (image-gen.ts)
+    // without a new OpenAI call — the textless base cartoon is kept on disk
+    // specifically so wording tweaks are free and near-instant. No-op (with
+    // an error) for a Giphy meme or a sprite render, neither of which has a
+    // base image to recomposite onto.
+    socket.on('teacher:edit-dialogue', async (p, ack) => {
+      const code = socket.data.roomCode;
+      if (!code || !socket.data.isTeacher) return ack?.({ ok: false, error: 'ไม่มีสิทธิ์' });
+      try {
+        const answer = await prisma.answer.findUnique({
+          where: { id: p.answerId },
+          include: { question: { include: { room: true } } },
+        });
+        if (!answer || answer.question.room.code !== code) {
+          return ack?.({ ok: false, error: 'ไม่พบคำตอบนี้' });
+        }
+        const spec = parseSpec(answer.analysis);
+        if (!spec) return ack?.({ ok: false, error: 'ยังไม่มีมีมให้แก้' });
+
+        const dialogue: DialogueLine[] = Array.isArray(p.dialogue)
+          ? p.dialogue
+              .map((d) => ({
+                speaker: String(d?.speaker ?? '').trim().slice(0, 20),
+                line: String(d?.line ?? '').trim().slice(0, 60),
+              }))
+              .filter((d) => d.speaker && d.line)
+              .slice(0, 4)
+          : [];
+
+        const memeUrl = await recompositeDialogue(answer.id, dialogue);
+        if (!memeUrl) {
+          return ack?.({ ok: false, error: 'แก้ไขไม่ได้ — มีมนี้ไม่ใช่ภาพที่ AI สร้าง' });
+        }
+
+        const newSpec = { ...spec, dialogue };
+        await prisma.answer.update({
+          where: { id: answer.id },
+          data: { analysis: newSpec as object, memeUrl },
+        });
+
+        ack?.({ ok: true, memeUrl });
+        io.to(playerChannel(answer.playerId)).emit('meme:mine', {
+          answerId: answer.id,
+          memeUrl,
+          scene: newSpec.scene,
+          verdict: newSpec.verdict,
+          conceptNote: newSpec.concept_note,
+          misconception: newSpec.misconception,
+          understood: newSpec.understood,
+        });
+        await pushGenerationStatus(io, code);
+      } catch (err) {
+        console.error('[socket] teacher:edit-dialogue failed:', err);
+        ack?.({ ok: false, error: 'แก้ไขไม่สำเร็จ' });
       }
     });
 
