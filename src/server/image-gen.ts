@@ -166,54 +166,23 @@ const escapeXml = (s: string) =>
  *  as odd gaps) into single spaces. */
 const sanitizeForOverlay = (s: string) => s.replace(/[\r\n\t]+/g, ' ').trim();
 
-const MIN_FONT_SIZE = 16;
-const MAX_FONT_SIZE = 30;
+const MIN_FONT_SIZE = 36;
+const MAX_FONT_SIZE = 80;
 
-/**
- * Approximates a font size (px) that keeps `text` inside `maxWidth` px.
- * sharp/librsvg has no synchronous text-measurement API to size against
- * exactly, so this is a deliberately conservative estimate — Kanit Bold's
- * average glyph advance at this size is close to 0.6em for Thai and Latin
- * alike, and erring toward "renders slightly smaller than necessary" is the
- * safe direction; erring the other way is exactly the overflow this exists
- * to prevent. The `clipPath` in `dialogueSvg` is the hard backstop for
- * whatever this estimate still gets wrong.
- */
 export function overlayFontSize(text: string, maxWidth: number): number {
   if (text.length === 0) return MAX_FONT_SIZE;
-  const estimated = Math.floor(maxWidth / (text.length * 0.62));
+  const estimated = Math.floor(maxWidth / (text.length * 0.6));
   return Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, estimated));
 }
 
-/**
- * Stacked speech-bar overlay, last line at the very bottom (the punchline,
- * matching how the teacher writes these by hand: setup lines first, reaction
- * last). Pure SVG text through sharp/librsvg — verified against real Thai
- * vowel/tone-mark shaping before this was wired in, not assumed to work.
- *
- * Two layers of overflow protection for a dialogue line at its max length
- * (60 chars + a 20-char speaker, per the DialogueLine schema): the font size
- * shrinks with `overlayFontSize` above, and every bar clips its own text to
- * its own rect regardless, so even a bad estimate cannot spill text past the
- * bar edge or over the image's main subject.
- *
- * Font size is set per-element (a `font-size` attribute on each text node)
- * rather than once in the `<style>` block below — SVG is strict XML, not
- * HTML, so a CSS rule there would win the cascade over a presentation
- * attribute and silently undo the per-line sizing.
- */
 async function dialogueSvg(width: number, height: number, dialogue: DialogueLine[]): Promise<string> {
   if (dialogue.length === 0) return '';
   const font = await fontBase64();
-  const lineHeight = 74;
-  const gap = 10;
-  const marginX = 28;
-  const marginBottom = 28;
-  const padX = 24;
+  const lineHeight = 100;
+  const gap = 15;
+  const marginX = 20;
+  const marginBottom = 40;
   const totalHeight = dialogue.length * lineHeight + (dialogue.length - 1) * gap;
-  // Clamped rather than trusted: a generated image is always requested at a
-  // fixed 1024x1024, but nothing here should silently draw off-canvas if
-  // that ever changes.
   const startY = Math.max(marginBottom, height - marginBottom - totalHeight);
   const barWidth = width - marginX * 2;
 
@@ -221,17 +190,12 @@ async function dialogueSvg(width: number, height: number, dialogue: DialogueLine
     .map((d, i) => {
       const y = startY + i * (lineHeight + gap);
       const label = escapeXml(`${sanitizeForOverlay(d.speaker)}: ${sanitizeForOverlay(d.line)}`);
-      const fontSize = overlayFontSize(label, barWidth - padX * 2);
-      const clipId = `overlay-clip-${i}`;
+      const fontSize = overlayFontSize(label, barWidth);
       return `
-        <clipPath id="${clipId}">
-          <rect x="${marginX}" y="${y}" width="${barWidth}" height="${lineHeight}" rx="16" />
-        </clipPath>
-        <rect x="${marginX}" y="${y}" width="${barWidth}" height="${lineHeight}"
-              rx="16" fill="black" fill-opacity="0.72" />
         <text x="${width / 2}" y="${y + lineHeight / 2}" text-anchor="middle"
               dominant-baseline="central" fill="white" font-size="${fontSize}"
-              clip-path="url(#${clipId})">${label}</text>
+              stroke="black" stroke-width="${fontSize * 0.15}" stroke-linejoin="round"
+              paint-order="stroke fill">${label}</text>
       `;
     })
     .join('');

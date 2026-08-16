@@ -246,6 +246,7 @@ export default function HostPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [guessIndex, setGuessIndex] = useState(0);
   const [guessTotal, setGuessTotal] = useState(0);
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   const [prompt, setPrompt] = useState(
     'ยกตัวอย่างเหตุการณ์ในชีวิตประจำวันที่เกี่ยวข้องกับกฎข้อที่ 3 ของนิวตัน',
@@ -767,7 +768,27 @@ export default function HostPage() {
                           {th.editDialogue}
                         </button>
                       )}
+                      {row.memeUrl && (
+                        <button
+                          className={`tag transition ${
+                            previewId === row.answerId ? 'bg-indigo-600 text-white' : 'bg-white hover:bg-paper-2'
+                          }`}
+                          onClick={() => setPreviewId(previewId === row.answerId ? null : row.answerId)}
+                        >
+                          {previewId === row.answerId ? 'ซ่อนมีม' : 'ดูมีม'}
+                        </button>
+                      )}
                     </div>
+                    {previewId === row.answerId && row.memeUrl && (
+                      <div className="mt-2 flex justify-center rounded-lg bg-black/5 p-2">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={row.memeUrl}
+                          alt="Meme preview"
+                          className="max-h-48 rounded shadow-sm"
+                        />
+                      </div>
+                    )}
                     {editingRow === row.answerId && (
                       <div className="mt-1 grid gap-2">
                         <p className="text-xs font-bold text-ink/40">{th.editDialogueHint}</p>
