@@ -8,16 +8,16 @@
 */
 
 @theme {
-  --color-ink: #111318;
-  --color-paper: #fff6e5;
-  --color-paper-2: #ffe9c4;
-  --color-pop: #ff6b35;
-  --color-sun: #ffd93d;
-  --color-mint: #16c79a;
-  --color-sky: #2e86ff;
-  --color-berry: #e63946;
-  --color-grape: #7f6fb0;
-  --color-night: #16171f;
+  --color-ink: #0f172a;
+  --color-paper: #f8fafc;
+  --color-paper-2: #f1f5f9;
+  --color-pop: #ef4444;
+  --color-sun: #facc15;
+  --color-mint: #10b981;
+  --color-sky: #3b82f6;
+  --color-berry: #e11d48;
+  --color-grape: #8b5cf6;
+  --color-night: #0f172a;
 
   --font-display: var(--font-kanit), 'Noto Sans Thai', 'Leelawadee UI', 'Segoe UI', system-ui, sans-serif;
   --font-sans: var(--font-kanit), 'Noto Sans Thai', 'Leelawadee UI', 'Segoe UI', system-ui, sans-serif;
@@ -60,16 +60,16 @@
 @layer components {
   /* the one shape this whole app is built out of */
   .chunk {
-    border: 4px solid var(--color-ink);
-    border-radius: 18px;
-    box-shadow: 6px 6px 0 var(--color-ink);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 16px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
     background: #fff;
   }
 
   .chunk-sm {
-    border: 3px solid var(--color-ink);
+    border: 1px solid rgba(0, 0, 0, 0.06);
     border-radius: 12px;
-    box-shadow: 4px 4px 0 var(--color-ink);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
   }
 
   .btn {
@@ -78,58 +78,53 @@
     justify-content: center;
     gap: 0.5rem;
     padding: 0.85rem 1.4rem;
-    border: 4px solid var(--color-ink);
+    border: none;
     border-radius: 14px;
-    box-shadow: 5px 5px 0 var(--color-ink);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     background: #fff;
-    font-weight: 900;
+    font-weight: 700;
     font-size: 1.05rem;
     cursor: pointer;
-    /* A springy release is what sells "this is alive": press flattens the
-       button instantly, but letting go overshoots past resting scale before
-       settling. Comes free on every .btn, everywhere in the app — no JS. */
-    transition:
-      transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
-      box-shadow 140ms ease,
-      filter 90ms ease;
+    /* Clean transition */
+    transition: all 0.2s ease;
     text-align: center;
   }
 
   .btn:hover:not(:disabled) {
-    filter: brightness(1.04);
-    transform: translateY(-2px);
-    box-shadow: 6px 7px 0 var(--color-ink);
+    filter: brightness(1.02);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
   }
 
   .btn:active:not(:disabled) {
-    transform: translate(5px, 5px) scale(0.97);
-    box-shadow: 0 0 0 var(--color-ink);
-    transition:
-      transform 60ms ease,
-      box-shadow 60ms ease;
+    transform: translateY(1px);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   }
 
   .btn:disabled {
-    opacity: 0.45;
+    opacity: 0.5;
     cursor: not-allowed;
-    box-shadow: 3px 3px 0 var(--color-ink);
+  }
+
+  .btn-sun {
+    background: var(--color-sun);
+    color: var(--color-ink);
+  }
+
+  .btn-mint {
+    background: var(--color-mint);
+    color: #fff;
   }
 
   .btn-pop {
-    background: var(--color-pop);
+    background: var(--color-berry);
     color: #fff;
-  }
-  .btn-sun {
-    background: var(--color-sun);
-  }
-  .btn-mint {
-    background: var(--color-mint);
-    color: #06281f;
   }
   .btn-sky {
     background: var(--color-sky);
     color: #fff;
   }
+
   .btn-ghost {
     background: transparent;
     box-shadow: 3px 3px 0 var(--color-ink);
@@ -138,19 +133,17 @@
   .field {
     width: 100%;
     padding: 0.85rem 1rem;
-    border: 4px solid var(--color-ink);
-    border-radius: 14px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
     background: #fff;
-    font-weight: 700;
+    font-weight: 500;
     outline: none;
-    transition:
-      box-shadow 140ms ease,
-      transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: all 0.2s ease;
   }
 
   .field:focus {
-    box-shadow: 0 0 0 4px var(--color-sun);
-    transform: scale(1.01);
+    border-color: var(--color-sky);
+    box-shadow: 0 0 0 3px rgba(46, 134, 255, 0.15);
   }
 
   .tag {
@@ -158,23 +151,28 @@
     align-items: center;
     gap: 0.35rem;
     padding: 0.25rem 0.7rem;
-    border: 3px solid var(--color-ink);
+    border: none;
     border-radius: 999px;
-    font-weight: 900;
+    font-weight: 700;
     font-size: 0.8rem;
-    background: #fff;
+    background: #f1f5f9;
+    color: #475569;
   }
 
   button.tag,
   a.tag {
     cursor: pointer;
-    transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: all 0.2s ease;
+  }
+
+  button.tag:hover:not(:disabled),
+  a.tag:hover {
+    filter: brightness(0.95);
   }
 
   button.tag:active:not(:disabled),
   a.tag:active {
-    transform: scale(0.93);
-    transition: transform 60ms ease;
+    transform: scale(0.96);
   }
 
   /* projector: readable from the back of the room */

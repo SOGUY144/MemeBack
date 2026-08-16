@@ -421,10 +421,11 @@ export default function HostPage() {
     <div className="min-h-dvh bg-paper p-4">
       <main className="mx-auto grid w-full max-w-6xl gap-4 lg:grid-cols-[1.1fr_1fr]">
         {/* header spans both columns */}
-        <header className="chunk flex flex-wrap items-center justify-between gap-3 bg-sun px-6 py-4 lg:col-span-2">
+        <header className="chunk flex flex-wrap items-center justify-between gap-3 bg-white px-6 py-4 lg:col-span-2">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-3xl font-black tracking-[0.08em] text-ink">{code}</span>
-            <span className="tag bg-white">
+            <span className="text-sm font-black text-ink/40 tracking-widest uppercase">ROOM PIN:</span>
+            <span className="text-3xl font-black tracking-[0.08em] text-grape">{code}</span>
+            <span className="tag bg-white ml-2">
               <span className="size-2 rounded-full bg-mint" aria-hidden="true" />
               {PHASE_LABEL[phase]}
             </span>
